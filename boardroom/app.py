@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 
 from . import auth
 from .billing import Billing, BillingError, verify_signature
-from .board import BOARD_BY_KEY, GUEST_COLOR, ask_prompt, board_public, make_guest
+from .board import BOARD_BY_KEY, FOCUS_AREAS, GUEST_COLOR, ask_prompt, board_public, make_guest
 from .config import Settings
 from .costs import Prices, add_usage
 from .db import Database
@@ -87,6 +87,7 @@ class MeetingIn(BaseModel):
     mode: Literal["quick", "deep"] = "quick"
     parent_id: int | None = None
     guest: GuestIn | None = None
+    focus: Literal["", "money", "career", "business", "relationships", "health"] = ""
 
 
 class AskIn(BaseModel):
@@ -260,6 +261,7 @@ def create_app(
             "password_reset": mailer is not None,
             "reminders": mailer is not None,
             "referral_bonus": settings.referral_bonus,
+            "focus_areas": [{"key": k, "label": v[0]} for k, v in FOCUS_AREAS.items()],
         }
 
     @app.post("/api/signup")
@@ -551,6 +553,7 @@ def create_app(
         question = body.question.strip()
         context = body.context.strip()
         guest = body.guest.model_dump() if body.guest else None
+        focus = body.focus
         if body.parent_id is not None and db.get_meeting(user["id"], body.parent_id) is None:
             raise HTTPException(status_code=404, detail="Original meeting not found.")
         # Spend a bonus meeting only once every other check has passed.
@@ -570,16 +573,17 @@ def create_app(
                 earlier += f"\nEarlier background: {parent['context']}"
             context = f"{earlier}\n\n{context}".strip()
             guest = guest or parent["guest"]
+            focus = focus or parent["focus"]
 
         meeting_id = await asyncio.to_thread(
-            db.create_meeting, user["id"], question, context, body.mode, body.parent_id, guest
+            db.create_meeting, user["id"], question, context, body.mode, body.parent_id, guest, focus
         )
         guest_advisor = make_guest(guest["name"], guest["perspective"]) if guest else None
 
         async def events():
-            yield {"type": "meeting", "id": meeting_id, "mode": body.mode, "guest": guest_public(guest_advisor)}
+            yield {"type": "meeting", "id": meeting_id, "mode": body.mode, "focus": focus, "guest": guest_public(guest_advisor)}
             async for event in run_meeting(
-                engine, db, meeting_id, question, context, body.mode, guest_advisor, prices
+                engine, db, meeting_id, question, context, body.mode, guest_advisor, prices, focus
             ):
                 yield event
 
@@ -616,6 +620,7 @@ def create_app(
             (m["verdict"] or {}).get("headline", ""),
             [(a["question"], a["answer"]) for a in m["asks"] if a["advisor"] == advisor.key],
             body.question,
+            m["focus"],
         )
 
         async def stream():

@@ -106,6 +106,8 @@ class Database:
                 c.execute("ALTER TABLE meetings ADD COLUMN share_token TEXT")
             if "guest" not in cols:
                 c.execute("ALTER TABLE meetings ADD COLUMN guest TEXT")
+            if "focus" not in cols:
+                c.execute("ALTER TABLE meetings ADD COLUMN focus TEXT NOT NULL DEFAULT ''")
             if "review_at" not in cols:
                 c.execute("ALTER TABLE meetings ADD COLUMN review_at TEXT")
             for col in ("outcome", "outcome_note", "outcome_at"):
@@ -309,12 +311,13 @@ class Database:
         mode: str,
         parent_id: int | None,
         guest: dict[str, str] | None = None,
+        focus: str = "",
     ) -> int:
         with self.conn() as c:
             cur = c.execute(
-                "INSERT INTO meetings (user_id, parent_id, question, context, mode, guest, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (user_id, parent_id, question, context, mode, json.dumps(guest) if guest else None, now_iso()),
+                "INSERT INTO meetings (user_id, parent_id, question, context, mode, guest, focus, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (user_id, parent_id, question, context, mode, json.dumps(guest) if guest else None, focus, now_iso()),
             )
             return int(cur.lastrowid)
 
@@ -476,6 +479,7 @@ class Database:
             "question": row["question"],
             "context": row["context"],
             "mode": row["mode"],
+            "focus": row["focus"],
             "status": row["status"],
             "created_at": row["created_at"],
             "share_token": row["share_token"],
@@ -550,6 +554,7 @@ class Database:
         return {
             "question": meeting["question"],
             "mode": meeting["mode"],
+            "focus": meeting["focus"],
             "guest": meeting["guest"],
             "created_at": meeting["created_at"],
             "verdict": meeting["verdict"],

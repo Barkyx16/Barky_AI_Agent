@@ -91,6 +91,7 @@ async def run_meeting(
     mode: str,
     guest: Advisor | None = None,
     prices: Prices | None = None,
+    focus: str = "",
 ) -> AsyncIterator[dict[str, Any]]:
     prices = prices or Prices()
     usage: dict[str, int] = {}
@@ -101,7 +102,7 @@ async def run_meeting(
     try:
         yield {"type": "round_start", "round": 1}
         opening: dict[str, str] = {}
-        prompts = {a.key: opening_prompt(question, context, today) for a in board}
+        prompts = {a.key: opening_prompt(question, context, today, focus) for a in board}
         async for event in _run_round(engine, board, 1, prompts, db, meeting_id, opening, usage):
             yield event
         rounds = [dict((a.key, opening.get(a.key, "")) for a in board)]
@@ -110,7 +111,7 @@ async def run_meeting(
             yield {"type": "round_start", "round": 2}
             rebuttals: dict[str, str] = {}
             prompts = {
-                a.key: rebuttal_prompt(a, question, context, today, rounds[0], by_key) for a in board
+                a.key: rebuttal_prompt(a, question, context, today, rounds[0], by_key, focus) for a in board
             }
             async for event in _run_round(engine, board, 2, prompts, db, meeting_id, rebuttals, usage):
                 yield event
@@ -119,7 +120,7 @@ async def run_meeting(
         yield {"type": "chair_start"}
         drafts: asyncio.Queue = asyncio.Queue()
         chair = asyncio.create_task(engine.verdict(
-            chair_prompt(question, context, today, rounds, by_key),
+            chair_prompt(question, context, today, rounds, by_key, focus),
             on_usage=lambda u: add_usage(usage, u),
             on_draft=drafts.put_nowait,
         ))

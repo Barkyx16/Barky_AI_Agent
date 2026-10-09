@@ -1072,3 +1072,50 @@ def test_record_decision_outcome(tmp_path):
     client.post("/api/logout")
     signup(client, email="eve@example.com")
     assert client.patch(f"/api/meetings/{meeting_id}/outcome", json={"outcome": "bad"}).status_code == 404
+
+
+# ---- board focus -------------------------------------------------------------
+
+
+class RecordingEngine(DemoEngine):
+    def __init__(self):
+        super().__init__(delay=0)
+        self.prompts = []
+
+    async def take(self, advisor, prompt):
+        self.prompts.append(prompt)
+        async for event in super().take(advisor, prompt):
+            yield event
+
+    async def verdict(self, prompt, on_usage=None, on_draft=None):
+        self.prompts.append(prompt)
+        return await super().verdict(prompt, on_usage, on_draft)
+
+
+def test_board_focus_reaches_every_prompt(tmp_path):
+    engine = RecordingEngine()
+    client = make_client(tmp_path, engine=engine)
+    signup(client)
+    assert {"key": "money", "label": "Money"} in client.get("/api/config").json()["focus_areas"]
+    evs = events(client.post("/api/meetings", json={"question": "Pay off debt or invest?", "focus": "money", "mode": "deep"}))
+    assert evs[0]["focus"] == "money"
+    assert len(engine.prompts) == 4 + 4 + 1
+    assert all("Money board" in p and "cash flow" in p for p in engine.prompts)
+    meeting_id = evs[0]["id"]
+    assert client.get(f"/api/meetings/{meeting_id}").json()["focus"] == "money"
+
+    engine.prompts.clear()
+    events(client.post(f"/api/meetings/{meeting_id}/ask", json={"advisor": "analyst", "question": "What rate?"}))
+    assert "Money board" in engine.prompts[0]
+
+    follow = events(client.post("/api/meetings", json={"question": "And if rates drop?", "parent_id": meeting_id}))
+    assert follow[0]["focus"] == "money"
+    assert client.post("/api/meetings", json={"question": "Bad focus", "focus": "astrology"}).status_code == 422
+
+
+def test_no_focus_by_default(tmp_path):
+    engine = RecordingEngine()
+    client = make_client(tmp_path, engine=engine)
+    signup(client)
+    events(client.post("/api/meetings", json={"question": "General question"}))
+    assert not any("board. " in p and "asked for a" in p for p in engine.prompts)

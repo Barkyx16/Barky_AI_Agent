@@ -13,6 +13,7 @@ const state = {
   draft: { question: "", context: "" },
   guest: { name: "", perspective: "" },
   filter: "",
+  focus: "",
 };
 
 const EXAMPLES = [
@@ -649,6 +650,10 @@ function renderComposer(prefill) {
       <p>Describe a decision or problem. Four advisors will weigh in at once, then the Chair makes the call.</p>
     </div>
     <form class="composer" id="composer">
+      <div class="focus-row" role="group" aria-label="Board focus">
+        <span class="focus-label">Board</span>
+        ${[{ key: "", label: "General" }, ...(state.config.focus_areas || [])].map((f) => `<button type="button" class="focus-chip" data-focus="${esc(f.key)}" aria-pressed="${(state.focus || "") === f.key}">${esc(f.label)}</button>`).join("")}
+      </div>
       <label class="sr-only" for="question">Your question</label>
       <textarea class="textarea" id="question" maxlength="2000" placeholder="e.g. Should I take the job offer in Denver or stay where I am?">${esc(state.draft.question)}</textarea>
       <details ${state.draft.context ? "open" : ""}>
@@ -699,6 +704,10 @@ function renderComposer(prefill) {
   q.focus();
   q.setSelectionRange(q.value.length, q.value.length);
   q.addEventListener("input", () => { state.draft.question = q.value; });
+  view.querySelectorAll("[data-focus]").forEach((b) => b.addEventListener("click", () => {
+    state.focus = b.dataset.focus;
+    view.querySelectorAll("[data-focus]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+  }));
   const mic = document.getElementById("mic");
   if (mic) {
     let rec = null;
@@ -767,7 +776,7 @@ function renderComposer(prefill) {
       gName.focus();
       return;
     }
-    const body = { question, context: ctx.value.trim(), mode: state.mode };
+    const body = { question, context: ctx.value.trim(), mode: state.mode, focus: state.focus || "" };
     if (guestName) body.guest = { name: guestName, perspective: gPersp.value.trim() };
     convene(body);
   });
@@ -778,7 +787,7 @@ function renderComposer(prefill) {
 function newLive(body) {
   const remarks = {};
   for (const a of boardAdvisors()) remarks[a.key] = { 1: freshRemark(), 2: freshRemark() };
-  return { id: null, guest: null, question: body.question, context: body.context, mode: body.mode, rounds: [1], remarks, chair: "waiting", verdict: null, steps: [], error: null, running: true };
+  return { id: null, guest: null, focus: body.focus || "", question: body.question, context: body.context, mode: body.mode, rounds: [1], remarks, chair: "waiting", verdict: null, steps: [], error: null, running: true };
 }
 
 function freshRemark() { return { text: "", status: "Thinking…", done: false, sources: [] }; }
@@ -846,6 +855,7 @@ function handleEvent(live, ev) {
   switch (ev.type) {
     case "meeting":
       live.id = ev.id;
+      if (ev.focus !== undefined) live.focus = ev.focus;
       if (ev.guest) { live.guest = ev.guest; live.remarks.guest = { 1: freshRemark(), 2: freshRemark() }; }
       location.hash = `#/m/${ev.id}`;
       refreshSidebar();
@@ -912,7 +922,7 @@ function renderLive() {
   const layoutKey = [live.id, live.rounds.length, live.chair, !!live.error, live.steps.length, live.running].join("|");
   if (view.dataset.layout !== layoutKey) {
     view.innerHTML = meetingLayout({
-      question: live.question, context: live.context, mode: live.mode, created_at: null, running: live.running,
+      question: live.question, context: live.context, mode: live.mode, focus: live.focus, created_at: null, running: live.running,
       shareable: !!live.verdict, share_token: live.share_token,
     }, live.rounds, (round) => seatsFor(live.guest).map((a) => {
       const r = live.remarks[a.key][round];
@@ -951,7 +961,8 @@ function renderLive() {
 
 function meetingLayout(m, rounds, cardsFor) {
   const when = m.created_at ? timeAgo(m.created_at) : m.readonly ? "Example" : "Now";
-  const mode = m.mode === "deep" ? "Deep debate" : "Quick session";
+  const focusLabel = (state.config.focus_areas || []).find((f) => f.key === m.focus)?.label;
+  const mode = `${m.mode === "deep" ? "Deep debate" : "Quick session"}${focusLabel ? ` · ${focusLabel} board` : ""}`;
   return `
     ${m.readonly ? "" : demoBanner()}
     <div class="meeting-head">
@@ -1366,7 +1377,7 @@ async function attach(m) {
     res = await fetch(`/api/meetings/${m.id}/events`, { credentials: "same-origin" });
   } catch (_) { return false; }
   if (!res.ok || state.meetingId !== m.id) return false;
-  const live = newLive({ question: m.question, context: m.context, mode: m.mode });
+  const live = newLive({ question: m.question, context: m.context, mode: m.mode, focus: m.focus });
   live.id = m.id;
   state.live = live;
   renderLive();

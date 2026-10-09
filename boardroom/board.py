@@ -139,15 +139,49 @@ def advisor_system(advisor: Advisor) -> str:
     return f"{CHARTER}\n{advisor.persona}"
 
 
-def brief(question: str, context: str, today: str) -> str:
+FOCUS_AREAS: dict[str, tuple[str, str]] = {
+    "money": (
+        "Money",
+        "Weigh cash flow, savings runway, debt, taxes, fees, risk tolerance and opportunity cost. "
+        "Use concrete numbers where you can. For large or regulated decisions, say when a licensed "
+        "financial or tax professional should check the plan.",
+    ),
+    "career": (
+        "Career",
+        "Weigh skills and growth, compensation, market demand, reputation, network, and how "
+        "reversible the move is. Consider the person's longer arc, not just the next job.",
+    ),
+    "business": (
+        "Business",
+        "Weigh customers and demand, unit economics, competition, cash runway, execution capacity "
+        "and the cheapest way to validate before scaling.",
+    ),
+    "relationships": (
+        "Relationships",
+        "Weigh everyone's needs and feelings, communication, boundaries, shared values and "
+        "long-term wellbeing. Be kind and even-handed about people who aren't present.",
+    ),
+    "health": (
+        "Health & life",
+        "Weigh wellbeing, energy, sustainability and quality of life. Give general information "
+        "only, never a diagnosis or treatment plan, and clearly recommend involving a qualified "
+        "medical or mental-health professional for anything medical.",
+    ),
+}
+
+
+def brief(question: str, context: str, today: str, focus: str = "") -> str:
     text = f"Today's date: {today}\n\nThe person's question or problem:\n{question.strip()}"
     if context.strip():
         text += f"\n\nBackground they shared:\n{context.strip()}"
+    if focus in FOCUS_AREAS:
+        label, guidance = FOCUS_AREAS[focus]
+        text += f"\n\nThe person asked for a {label} board. {guidance}"
     return text
 
 
-def opening_prompt(question: str, context: str, today: str) -> str:
-    return brief(question, context, today) + "\n\nGive your opening remarks from your role."
+def opening_prompt(question: str, context: str, today: str, focus: str = "") -> str:
+    return brief(question, context, today, focus) + "\n\nGive your opening remarks from your role."
 
 
 REBUTTAL_MARKER = "This is the rebuttal round."
@@ -165,12 +199,13 @@ def rebuttal_prompt(
     today: str,
     remarks: dict[str, str],
     advisors: dict[str, Advisor],
+    focus: str = "",
 ) -> str:
     others = "\n\n".join(
         f"{_speaker(advisors, k)}:\n{t}" for k, t in remarks.items() if k != advisor.key and t
     )
     return (
-        brief(question, context, today)
+        brief(question, context, today, focus)
         + f"\n\nYour opening remarks were:\n{remarks.get(advisor.key) or '(you did not speak in the opening round)'}"
         + f"\n\nThe rest of the board said:\n\n{others}\n\n"
         + REBUTTAL_MARKER
@@ -192,8 +227,9 @@ def ask_prompt(
     headline: str,
     history: list[tuple[str, str]],
     ask: str,
+    focus: str = "",
 ) -> str:
-    parts = [brief(question, context, today)]
+    parts = [brief(question, context, today, focus)]
     if my_remarks:
         parts.append("What you said in the meeting:\n" + "\n\n".join(my_remarks))
     if headline:
@@ -240,8 +276,9 @@ def chair_prompt(
     today: str,
     rounds: list[dict[str, str]],
     advisors: dict[str, Advisor],
+    focus: str = "",
 ) -> str:
-    parts = [brief(question, context, today)]
+    parts = [brief(question, context, today, focus)]
     for i, remarks in enumerate(rounds, start=1):
         label = "Opening remarks" if i == 1 else "Rebuttals"
         parts.append(

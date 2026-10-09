@@ -213,6 +213,11 @@ button, input, textarea { font: inherit; color: inherit; }
 .composer-head h1 { font-size: clamp(30px, 3.6vw, 42px); }
 .composer-head p { color: var(--text-2); font-size: 16.5px; margin-top: 10px; }
 .composer { margin-top: 28px; background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px; }
+.focus-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding-bottom: 12px; margin-bottom: 8px; border-bottom: 1px solid var(--line); }
+.focus-label { font-size: 12px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); margin-right: 4px; }
+.focus-chip { border: 1px solid var(--line); background: transparent; color: var(--text-2); border-radius: 99px; padding: 4px 11px; font-size: 13px; cursor: pointer; }
+.focus-chip:hover { border-color: var(--line-strong); color: var(--text); }
+.focus-chip[aria-pressed="true"] { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 45%, transparent); color: var(--text); font-weight: 600; }
 .composer .textarea { border: 0; padding: 4px 4px; min-height: 120px; font-size: 17px; box-shadow: none; background: transparent; }
 .composer .textarea:focus { box-shadow: none; }
 .composer details { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 12px; }

@@ -16,6 +16,7 @@ Boardroom gives anyone a private board of AI advisors. You bring a decision ("Sh
 ### Features
 
 - **Live, parallel debate.** All four advisors stream at the same time.
+- **Board focus.** Pick a Money, Career, Business, Relationships or Health & life board, and every advisor and the Chair get domain-specific guidance (cash flow and taxes for Money; extra care to involve professionals for Health). Follow-ups keep the focus.
 - **Guest advisors.** Seat anyone at the table with a name and perspective, or pick a preset. They debate alongside the board and get a vote, and follow-ups keep the same guest.
 - **Ask an advisor.** After the verdict, ask any advisor a direct follow-up ("Skeptic, what's the worst case?") and get a streamed answer in their voice. It costs one API call instead of a full meeting. Free: 10 a day; Pro: 200.
 - **Deep debate mode (Pro).** Adds a rebuttal round where advisors challenge each other before the Chair rules.
