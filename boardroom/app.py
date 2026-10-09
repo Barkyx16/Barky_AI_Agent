@@ -48,6 +48,15 @@ class GuestIn(BaseModel):
     perspective: str = Field(default="", max_length=400)
 
 
+class PasswordChangeIn(BaseModel):
+    current_password: str = Field(max_length=200)
+    new_password: str = Field(min_length=8, max_length=200)
+
+
+class DeleteAccountIn(BaseModel):
+    password: str = Field(max_length=200)
+
+
 class MeetingIn(BaseModel):
     question: str = Field(min_length=3, max_length=2000)
     context: str = Field(default="", max_length=6000)
@@ -197,6 +206,24 @@ def create_app(
     @app.get("/api/me")
     def me(user=Depends(current_user)):
         return user_out(user)
+
+    @app.post("/api/account/password")
+    def change_password(body: PasswordChangeIn, request: Request, user=Depends(current_user)):
+        throttle(f"pw:{user['id']}")
+        if not auth.verify_password(body.current_password, user["pw_hash"]):
+            raise HTTPException(status_code=401, detail="Your current password is incorrect.")
+        db.set_password(user["id"], auth.hash_password(body.new_password))
+        db.delete_other_sessions(user["id"], request.cookies.get(COOKIE, ""))
+        return {"ok": True}
+
+    @app.delete("/api/account")
+    def delete_account(body: DeleteAccountIn, response: Response, user=Depends(current_user)):
+        throttle(f"pw:{user['id']}")
+        if not auth.verify_password(body.password, user["pw_hash"]):
+            raise HTTPException(status_code=401, detail="Password is incorrect.")
+        db.delete_user(user["id"])
+        response.delete_cookie(COOKIE)
+        return {"ok": True}
 
     @app.get("/api/meetings")
     def meetings(user=Depends(current_user)):

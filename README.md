@@ -20,6 +20,8 @@ Boardroom gives anyone a private board of AI advisors. You bring a decision ("Sh
 - **Deep debate mode (Pro).** Adds a rebuttal round where advisors challenge each other before the Chair rules.
 - **Verdict card.** Headline, confidence ring, each advisor's vote, risks, first move, and an action plan.
 - **Never lose a meeting.** Meetings run on the server independently of the browser. Refresh, lose your connection or open a second tab, and the page catches up live.
+- **Print or save as PDF.** Clean, ink-friendly verdict printouts.
+- **Account control.** Change your password (which signs out other devices) or delete your account and all its data.
 - **Plan tracking.** Check off steps; progress shows in the sidebar for every meeting.
 - **Follow-ups.** Reconvene the board on an earlier decision ("What if I wait six months?") with the earlier verdict as context.
 - **Shareable verdicts.** One click creates a public read-only link to the debate and verdict, with a sign-up call to action. Private background notes and progress are never shared.
@@ -37,7 +39,9 @@ cp .env.example .env          # add your ANTHROPIC_API_KEY (leave empty for demo
 python -m boardroom           # http://127.0.0.1:8000
 ```
 
-Or with Docker:
+### Deploy
+
+The repo includes a `render.yaml` blueprint: create a new **Blueprint** on [Render](https://render.com) from this repository, fill in the secret values when prompted, and you get HTTPS, a persistent disk for the database, and health checks. Any Docker host works too:
 
 ```bash
 docker build -t boardroom .
@@ -104,6 +108,6 @@ python -m pytest
 
 ## Roadmap to revenue
 
-1. Password reset and email verification.
+1. Password reset by email, and email verification.
 2. Reminder emails for plan steps and the review date.
 3. Saved custom boards: reusable guest lineups per user.

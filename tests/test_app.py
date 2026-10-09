@@ -533,3 +533,32 @@ def test_signup_is_throttled(tmp_path):
         for i in range(11)
     ]
     assert codes[:10] == [200] * 10 and codes[10] == 429
+
+
+def test_change_password_signs_out_other_devices(tmp_path):
+    client = make_client(tmp_path)
+    signup(client)
+    other = TestClient(client.app)
+    other.post("/api/login", json={"email": "ada@example.com", "password": "correct horse"})
+    assert other.get("/api/me").status_code == 200
+    assert client.post("/api/account/password", json={"current_password": "wrong", "new_password": "new password"}).status_code == 401
+    assert client.post("/api/account/password", json={"current_password": "correct horse", "new_password": "new password"}).status_code == 200
+    assert client.get("/api/me").status_code == 200
+    assert other.get("/api/me").status_code == 401
+    client.post("/api/logout")
+    assert client.post("/api/login", json={"email": "ada@example.com", "password": "new password"}).status_code == 200
+
+
+def test_delete_account_removes_everything(tmp_path):
+    client = make_client(tmp_path)
+    signup(client)
+    meeting_id = events(client.post("/api/meetings", json={"question": "Delete my data?"}))[0]["id"]
+    token = client.post(f"/api/meetings/{meeting_id}/share").json()["token"]
+    assert client.request("DELETE", "/api/account", json={"password": "nope"}).status_code == 401
+    assert client.request("DELETE", "/api/account", json={"password": "correct horse"}).status_code == 200
+    assert client.get("/api/me").status_code == 401
+    assert client.get(f"/api/shared/{token}").status_code == 404
+    with client.app.state.db.conn() as c:
+        assert c.execute("SELECT COUNT(*) FROM meetings").fetchone()[0] == 0
+        assert c.execute("SELECT COUNT(*) FROM steps").fetchone()[0] == 0
+    signup(client)  # the email is free again

@@ -130,6 +130,18 @@ class Database:
                 "UPDATE users SET plan = ? WHERE stripe_customer_id = ?", (plan, customer_id)
             ).rowcount > 0
 
+    def set_password(self, user_id: int, pw_hash: str) -> None:
+        with self.conn() as c:
+            c.execute("UPDATE users SET pw_hash = ? WHERE id = ?", (pw_hash, user_id))
+
+    def delete_other_sessions(self, user_id: int, keep_token: str) -> None:
+        with self.conn() as c:
+            c.execute("DELETE FROM sessions WHERE user_id = ? AND token != ?", (user_id, keep_token))
+
+    def delete_user(self, user_id: int) -> None:
+        with self.conn() as c:
+            c.execute("DELETE FROM users WHERE id = ?", (user_id,))
+
     def create_session(self, token: str, user_id: int, expires_at: str) -> None:
         with self.conn() as c:
             c.execute(

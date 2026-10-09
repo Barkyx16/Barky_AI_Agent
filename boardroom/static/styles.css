@@ -327,6 +327,28 @@ button, input, textarea { font: inherit; color: inherit; }
 .row-gap { display: flex; gap: 8px; margin-top: 14px; }
 .row-gap .input { flex: 1; min-width: 0; font-size: 13.5px; }
 
+/* Settings --------------------------------------------------------------- */
+.settings-block { border-top: 1px solid var(--line); padding-top: 16px; margin-top: 16px; }
+.settings-block h3, .settings-block summary { font: 650 14px var(--sans); margin-bottom: 12px; cursor: pointer; }
+.danger summary { color: var(--bad); list-style: none; }
+.danger summary::-webkit-details-marker { display: none; }
+.btn-danger { background: var(--bad); color: #fff; border-color: transparent; }
+.btn-danger:hover { filter: brightness(1.08); border-color: transparent; }
+
+/* Print: a clean, ink-friendly verdict ------------------------------------ */
+@media print {
+  :root, :root:not([data-theme="light"]), :root[data-theme] { color-scheme: light; --bg: #fff; --bg-elev: #fff; --bg-sunk: #f4f4f4; --text: #000; --text-2: #333; --text-3: #666; --line: #ccc; --shadow: none; --accent-soft: #f6f1e6; }
+  body { background: #fff; font-size: 12px; }
+  .sidebar, .topbar, .scrim, .head-actions, .demo-banner, .followup, .alert, #toast, .public-bar .btn, .cta { display: none !important; }
+  .shell { display: block; }
+  .main { padding: 0; }
+  .card, .panel, .step { break-inside: avoid; box-shadow: none; }
+  .grid { grid-template-columns: 1fr 1fr; }
+  .caret > p:last-child::after { content: none; }
+  .ring, .vote .avatar, .avatar { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .section-title { break-after: avoid; }
+}
+
 /* Toast ------------------------------------------------------------------ */
 #toast {
   position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); opacity: 0;
@@ -337,7 +359,7 @@ button, input, textarea { font: inherit; color: inherit; }
 
 /* Modal ------------------------------------------------------------------ */
 .modal-back { position: fixed; inset: 0; background: rgba(0, 0, 0, .45); display: grid; place-items: center; z-index: 40; padding: 16px; }
-.modal { width: 100%; max-width: 440px; background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow); }
+.modal { width: 100%; max-width: 440px; max-height: calc(100vh - 32px); overflow-y: auto; background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow); }
 .modal h2 { font-size: 24px; margin-bottom: 8px; }
 .modal .badge { margin-bottom: 12px; }
 .modal ul { padding-left: 1.2em; color: var(--text-2); }

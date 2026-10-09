@@ -150,6 +150,7 @@ function toggleTheme() {
 }
 
 const ICON_THEME = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>`;
+const ICON_GEAR = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>`;
 const ICON_MENU = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>`;
 const ICON_PLUS = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>`;
 
@@ -276,11 +277,12 @@ function renderAccount() {
       ${u.plan !== "pro" && !state.config.demo
         ? `<button class="btn btn-sm" id="upgrade">Upgrade to Pro</button>`
         : state.user.can_manage_billing ? `<button class="btn btn-ghost btn-sm" id="billing">Manage billing</button>` : "<span></span>"}
-      <span><button class="btn btn-ghost btn-sm" id="theme" aria-label="Toggle theme">${ICON_THEME}</button>
+      <span><button class="btn btn-ghost btn-sm" id="settings" aria-label="Account settings">${ICON_GEAR}</button><button class="btn btn-ghost btn-sm" id="theme" aria-label="Toggle theme">${ICON_THEME}</button>
       <button class="btn btn-ghost btn-sm" id="logout">Sign out</button></span>
     </div>`;
   applyStyles(el);
   document.getElementById("theme").addEventListener("click", toggleTheme);
+  document.getElementById("settings").addEventListener("click", showSettings);
   document.getElementById("logout").addEventListener("click", async () => {
     await api("/api/logout", { method: "POST" });
     state.user = null; state.meetings = []; state.live = null;
@@ -325,6 +327,61 @@ function showUpgrade() {
     }
   });
   (go || back.querySelector("#close-up")).focus();
+}
+
+function showSettings() {
+  const back = document.createElement("div");
+  back.className = "modal-back";
+  back.innerHTML = `
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="set-title">
+      <h2 id="set-title">Account</h2>
+      <p class="fine left">${esc(state.user.email)}</p>
+      <form id="pw-form" class="settings-block">
+        <h3>Change password</h3>
+        <div class="field"><label for="pw-cur">Current password</label><input class="input" id="pw-cur" type="password" autocomplete="current-password" required></div>
+        <div class="field"><label for="pw-new">New password</label><input class="input" id="pw-new" type="password" autocomplete="new-password" minlength="8" required placeholder="At least 8 characters"></div>
+        <p class="error-text" id="pw-error"></p>
+        <button class="btn" type="submit">Update password</button>
+      </form>
+      <details class="settings-block danger">
+        <summary>Delete account</summary>
+        <form id="del-form">
+          <p class="fine left">This permanently deletes your account, meetings, plans and share links. It can't be undone.${state.user.usage.plan === "pro" && state.config.billing ? " Cancel your subscription under <b>Manage billing</b> first." : ""}</p>
+          <div class="field"><label for="del-pw">Confirm with your password</label><input class="input" id="del-pw" type="password" autocomplete="current-password" required></div>
+          <p class="error-text" id="del-error"></p>
+          <button class="btn btn-danger" type="submit">Delete my account</button>
+        </form>
+      </details>
+      <div class="actions"><button class="btn btn-ghost" id="set-close">Close</button></div>
+    </div>`;
+  document.body.appendChild(back);
+  const close = () => back.remove();
+  back.addEventListener("click", (e) => { if (e.target === back) close(); });
+  back.querySelector("#set-close").addEventListener("click", close);
+  back.querySelector("#pw-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const err = back.querySelector("#pw-error");
+    err.textContent = "";
+    try {
+      await api("/api/account/password", { method: "POST", body: { current_password: back.querySelector("#pw-cur").value, new_password: back.querySelector("#pw-new").value } });
+      toast("Password updated. Other devices were signed out.");
+      close();
+    } catch (ex) { err.textContent = ex.message; }
+  });
+  back.querySelector("#del-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const err = back.querySelector("#del-error");
+    err.textContent = "";
+    try {
+      await api("/api/account", { method: "DELETE", body: { password: back.querySelector("#del-pw").value } });
+      close();
+      state.user = null; state.meetings = []; state.live = null;
+      location.hash = "";
+      renderLanding("signup");
+      toast("Your account has been deleted.");
+    } catch (ex) { err.textContent = ex.message; }
+  });
+  back.querySelector("#pw-cur").focus();
 }
 
 async function refreshSidebar() {
@@ -666,6 +723,7 @@ function meetingLayout(m, rounds, cardsFor) {
         ${m.readonly ? "" : `
         <button class="btn btn-sm" data-act="share" ${m.running || !m.shareable ? "disabled" : ""}>${m.share_token ? "Shared" : "Share"}</button>
         <button class="btn btn-ghost btn-sm" data-act="copy" ${m.running ? "disabled" : ""}>Copy summary</button>
+        <button class="btn btn-ghost btn-sm" data-act="print" ${m.running ? "disabled" : ""}>Print</button>
         <button class="btn btn-ghost btn-sm" data-act="delete" ${m.running ? "disabled" : ""}>Delete</button>`}
       </div>
     </div>
@@ -777,6 +835,7 @@ function bindMeetingActions(view, m) {
     } catch (err) { toast(err.message); }
   });
   view.querySelector('[data-act="share"]')?.addEventListener("click", (e) => showShare(m, e.currentTarget));
+  view.querySelector('[data-act="print"]')?.addEventListener("click", () => window.print());
   view.querySelector('[data-act="copy"]')?.addEventListener("click", async () => {
     if (!m.verdict) { toast("The verdict isn't in yet."); return; }
     const v = m.verdict;

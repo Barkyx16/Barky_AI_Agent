@@ -1,0 +1,26 @@
+# One-click deploy on Render: https://render.com/deploy
+services:
+  - type: web
+    name: boardroom
+    runtime: docker
+    plan: starter
+    healthCheckPath: /healthz
+    disk:
+      name: boardroom-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: BOARDROOM_SECURE_COOKIES
+        value: "1"
+      - key: FORWARDED_ALLOW_IPS
+        value: "*"
+      - key: BOARDROOM_PUBLIC_URL
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_PRICE_ID
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
