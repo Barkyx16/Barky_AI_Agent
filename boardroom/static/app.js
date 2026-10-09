@@ -326,7 +326,10 @@ function route() {
   window.scrollTo(0, 0);
 }
 
-window.addEventListener("hashchange", route);
+window.addEventListener("hashchange", () => {
+  if (/^#\/s\//.test(location.hash) || document.querySelector(".public")) { location.reload(); return; }
+  route();
+});
 
 /* ---------- composer ----------------------------------------------------- */
 
@@ -534,12 +537,13 @@ function renderLive() {
   if (view.dataset.layout !== layoutKey) {
     view.innerHTML = meetingLayout({
       question: live.question, context: live.context, mode: live.mode, created_at: null, running: live.running,
+      shareable: !!live.verdict, share_token: live.share_token,
     }, live.rounds, (round) => boardAdvisors().map((a) => remarkCard(a, live.remarks[a.key][round], round)).join(""))
       + chairSection(live)
       + (live.error ? errorBox(live.error) : "");
     view.dataset.layout = layoutKey;
     applyStyles(view);
-    bindMeetingActions(view, { id: live.id, question: live.question, verdict: live.verdict, steps: live.steps });
+    bindMeetingActions(view, live);
     return;
   }
   for (const round of live.rounds) {
@@ -561,7 +565,7 @@ function meetingLayout(m, rounds, cardsFor) {
   const when = m.created_at ? timeAgo(m.created_at) : "Now";
   const mode = m.mode === "deep" ? "Deep debate" : "Quick session";
   return `
-    ${demoBanner()}
+    ${m.readonly ? "" : demoBanner()}
     <div class="meeting-head">
       <div>
         <div class="eyebrow"><span>${esc(mode)}</span><span>·</span><span>${esc(when)}</span>${m.running ? '<span class="badge">In session</span>' : ""}</div>
@@ -569,8 +573,10 @@ function meetingLayout(m, rounds, cardsFor) {
         ${m.context ? `<div class="context">${esc(m.context)}</div>` : ""}
       </div>
       <div class="head-actions">
+        ${m.readonly ? "" : `
+        <button class="btn btn-sm" data-act="share" ${m.running || !m.shareable ? "disabled" : ""}>${m.share_token ? "Shared" : "Share"}</button>
         <button class="btn btn-ghost btn-sm" data-act="copy" ${m.running ? "disabled" : ""}>Copy summary</button>
-        <button class="btn btn-ghost btn-sm" data-act="delete" ${m.running ? "disabled" : ""}>Delete</button>
+        <button class="btn btn-ghost btn-sm" data-act="delete" ${m.running ? "disabled" : ""}>Delete</button>`}
       </div>
     </div>
     ${rounds.map((r) => `
@@ -615,7 +621,7 @@ function chairSection(m) {
   return "";
 }
 
-function verdictCard(v, steps) {
+function verdictCard(v, steps, readonly = false) {
   const by = advisorsByKey();
   const chair = by.chair;
   const done = steps.filter((s) => s.done).length;
@@ -639,10 +645,10 @@ function verdictCard(v, steps) {
     </div>
     <div class="plan">
       <div class="plan-head"><h3>Action plan</h3>
-        <div class="progress"><span id="plan-count">${done} of ${steps.length} done</span><span class="bar"><i id="plan-bar" data-w="${pct}"></i></span></div></div>
+        ${readonly ? "" : `<div class="progress"><span id="plan-count">${done} of ${steps.length} done</span><span class="bar"><i id="plan-bar" data-w="${pct}"></i></span></div>`}</div>
       <ul class="steps">${steps.map((s) => `
         <li><label class="step ${s.done ? "done" : ""}" data-step="${s.id}">
-          <input type="checkbox" ${s.done ? "checked" : ""} aria-label="Mark “${esc(s.title)}” done">
+          <input type="checkbox" ${s.done ? "checked" : ""} ${readonly ? "disabled" : ""} aria-label="Mark “${esc(s.title)}” done">
           <div><div class="t">${esc(s.title)}</div><div class="d">${esc(s.detail)}</div></div>
           ${s.when ? `<span class="w">${esc(s.when)}</span>` : ""}
         </label></li>`).join("")}</ul>
@@ -676,6 +682,7 @@ function bindMeetingActions(view, m) {
       refreshSidebar();
     } catch (err) { toast(err.message); }
   });
+  view.querySelector('[data-act="share"]')?.addEventListener("click", (e) => showShare(m, e.currentTarget));
   view.querySelector('[data-act="copy"]')?.addEventListener("click", async () => {
     if (!m.verdict) { toast("The verdict isn't in yet."); return; }
     const v = m.verdict;
@@ -748,6 +755,7 @@ async function loadMeeting(id) {
   const byKey = {};
   for (const t of m.takes) byKey[`${t.member}-${t.round}`] = t;
   const stalled = m.status !== "done";
+  m.shareable = m.status === "done";
   view.innerHTML = meetingLayout(m, rounds, (round) => boardAdvisors().map((a) => {
     const t = byKey[`${a.key}-${round}`];
     const r = t ? { text: t.text, done: true, status: "Done", sources: t.sources } : { text: "", done: false, status: stalled ? "No remarks" : "Thinking…", sources: [] };
@@ -756,19 +764,100 @@ async function loadMeeting(id) {
     + (m.verdict ? `<div class="section-title">The verdict</div>${verdictCard(m.verdict, m.steps)}${followupBox()}` : "")
     + (stalled ? errorBox(m.status === "running" ? "This meeting is still in session in another tab." : "This meeting didn't finish.") : "");
   applyStyles(view);
-  bindMeetingActions(view, { id: m.id, question: m.question, verdict: m.verdict, steps: m.steps });
+  bindMeetingActions(view, m);
+}
+
+function showShare(m, button) {
+  const back = document.createElement("div");
+  back.className = "modal-back";
+  document.body.appendChild(back);
+  const close = () => back.remove();
+  back.addEventListener("click", (e) => { if (e.target === back) close(); });
+  const linkFor = (token) => `${location.origin}/#/s/${token}`;
+  const paint = () => {
+    back.innerHTML = m.share_token ? `
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="sh-title">
+        <h2 id="sh-title">Share this verdict</h2>
+        <p class="fine left">Anyone with the link can read the debate and verdict. Your background notes and progress stay private.</p>
+        <div class="row-gap"><input class="input" id="share-link" readonly value="${esc(linkFor(m.share_token))}"><button class="btn btn-primary" id="share-copy">Copy</button></div>
+        <div class="actions"><button class="btn btn-ghost" id="share-stop">Stop sharing</button><button class="btn" id="share-done">Done</button></div>
+      </div>` : `
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="sh-title">
+        <h2 id="sh-title">Share this verdict?</h2>
+        <p class="fine left">You'll get a public link to the debate, verdict, and plan. Your background notes and progress stay private. You can stop sharing anytime.</p>
+        <div class="actions"><button class="btn btn-ghost" id="share-done">Cancel</button><button class="btn btn-primary" id="share-create">Create link</button></div>
+      </div>`;
+    back.querySelector("#share-done").addEventListener("click", close);
+    back.querySelector("#share-create")?.addEventListener("click", async () => {
+      try {
+        const { token } = await api(`/api/meetings/${m.id}/share`, { method: "POST" });
+        m.share_token = token; button.textContent = "Shared"; paint();
+      } catch (err) { toast(err.message); }
+    });
+    back.querySelector("#share-copy")?.addEventListener("click", async () => {
+      const input = back.querySelector("#share-link");
+      try { await navigator.clipboard.writeText(input.value); toast("Link copied"); } catch (_) { input.select(); }
+    });
+    back.querySelector("#share-stop")?.addEventListener("click", async () => {
+      try {
+        await api(`/api/meetings/${m.id}/share`, { method: "DELETE" });
+        m.share_token = null; button.textContent = "Share"; toast("Link turned off"); close();
+      } catch (err) { toast(err.message); }
+    });
+    (back.querySelector("#share-copy") || back.querySelector("#share-create")).focus();
+  };
+  paint();
+}
+
+/* ---------- public shared view ------------------------------------------ */
+
+async function renderShared(token) {
+  let m;
+  try {
+    m = await api(`/api/shared/${encodeURIComponent(token)}`);
+  } catch (err) {
+    $app.innerHTML = `<div class="public"><header class="public-bar"><a class="brand" href="/"><img src="/static/favicon.svg" alt=""> Boardroom</a></header>
+      <main class="container narrow"><div class="alert" role="alert"><span>${esc(err.message)}</span><a class="btn btn-sm" href="/">Go to Boardroom</a></div></main></div>`;
+    return;
+  }
+  document.title = `${m.verdict?.headline || m.question} · Boardroom`;
+  const rounds = [...new Set(m.takes.map((t) => t.round))].sort();
+  const byKey = {};
+  for (const t of m.takes) byKey[`${t.member}-${t.round}`] = t;
+  $app.innerHTML = `
+    <div class="public">
+      <header class="public-bar">
+        <a class="brand" href="/"><img src="/static/favicon.svg" alt=""> Boardroom</a>
+        <a class="btn btn-primary btn-sm" href="/">Convene your own board</a>
+      </header>
+      <main class="main"><div class="container">
+        ${meetingLayout({ ...m, readonly: true }, rounds.length ? rounds : [1], (round) => boardAdvisors().map((a) => {
+          const t = byKey[`${a.key}-${round}`];
+          return remarkCard(a, { text: t ? t.text : "", done: true, status: "Done", sources: t ? t.sources : [] }, round);
+        }).join(""))}
+        ${m.verdict ? `<div class="section-title">The verdict</div>${verdictCard(m.verdict, m.steps, true)}` : ""}
+        <section class="cta card">
+          <h2>Have a decision of your own?</h2>
+          <p>Bring it to a private board of AI advisors. They debate it live, and the Chair hands you a verdict and a plan.</p>
+          <a class="btn btn-primary" href="/">Start free</a>
+        </section>
+      </div></main>
+    </div>`;
+  applyStyles($app);
 }
 
 /* ---------- boot ---------------------------------------------------------- */
 
 async function boot() {
   initTheme();
+  const shared = location.hash.match(/^#\/s\/([\w-]+)/);
   try {
     state.config = await api("/api/config");
   } catch (_) {
     $app.innerHTML = `<div class="boot"><p>Boardroom is unavailable right now. Please refresh in a moment.</p></div>`;
     return;
   }
+  if (shared) { renderShared(shared[1]); return; }
   try {
     state.user = await api("/api/me");
   } catch (_) {

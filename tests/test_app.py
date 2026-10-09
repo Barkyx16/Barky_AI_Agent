@@ -261,3 +261,50 @@ async def test_claude_engine_resumes_pause_turn_and_collects_sources():
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
+
+
+def test_share_links_are_public_and_private_details_hidden(tmp_path):
+    client = make_client(tmp_path)
+    signup(client)
+    evs = events(client.post("/api/meetings", json={"question": "Should I sell my car?", "context": "My salary is 52k"}))
+    meeting_id = evs[0]["id"]
+    step_id = client.get(f"/api/meetings/{meeting_id}").json()["steps"][0]["id"]
+    client.patch(f"/api/steps/{step_id}", json={"done": True})
+
+    token = client.post(f"/api/meetings/{meeting_id}/share").json()["token"]
+    assert client.post(f"/api/meetings/{meeting_id}/share").json()["token"] == token  # stable
+    client.post("/api/logout")
+
+    public = client.get(f"/api/shared/{token}")
+    assert public.status_code == 200
+    data = public.json()
+    assert data["question"] == "Should I sell my car?"
+    assert data["verdict"]["headline"]
+    assert len(data["takes"]) == 4
+    assert "52k" not in public.text
+    assert "context" not in data and "id" not in data
+    assert not any(s["done"] for s in data["steps"])
+
+    client.post("/api/login", json={"email": "ada@example.com", "password": "correct horse"})
+    assert client.delete(f"/api/meetings/{meeting_id}/share").status_code == 200
+    assert client.get(f"/api/shared/{token}").status_code == 404
+
+
+def test_cannot_share_someone_elses_or_unfinished_meeting(tmp_path):
+    client = make_client(tmp_path, engine=BrokenEngine(delay=0))
+    signup(client)
+    failed = events(client.post("/api/meetings", json={"question": "Will this work?"}))[0]["id"]
+    assert client.post(f"/api/meetings/{failed}/share").status_code == 409
+    client.post("/api/logout")
+    signup(client, email="eve@example.com")
+    assert client.post(f"/api/meetings/{failed}/share").status_code == 404
+    assert client.get("/api/shared/not-a-real-token").status_code == 404
+
+
+def test_login_is_throttled(tmp_path):
+    client = make_client(tmp_path)
+    signup(client)
+    client.post("/api/logout")
+    codes = [client.post("/api/login", json={"email": "ada@example.com", "password": "wrong pass"}).status_code for _ in range(9)]
+    assert codes[:8] == [401] * 8
+    assert codes[8] == 429

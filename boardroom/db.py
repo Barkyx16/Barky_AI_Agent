@@ -67,6 +67,14 @@ class Database:
             Path(path).parent.mkdir(parents=True, exist_ok=True)
         with self.conn() as c:
             c.executescript(SCHEMA)
+            cols = {r["name"] for r in c.execute("PRAGMA table_info(meetings)")}
+            if "share_token" not in cols:
+                c.execute("ALTER TABLE meetings ADD COLUMN share_token TEXT")
+            c.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS meetings_share ON meetings(share_token) "
+                "WHERE share_token IS NOT NULL"
+            )
+            c.execute("DELETE FROM sessions WHERE expires_at <= ?", (now_iso(),))
 
     @contextmanager
     def conn(self) -> Iterator[sqlite3.Connection]:
@@ -224,6 +232,7 @@ class Database:
             "mode": row["mode"],
             "status": row["status"],
             "created_at": row["created_at"],
+            "share_token": row["share_token"],
             "verdict": json.loads(row["verdict"]) if row["verdict"] else None,
             "takes": [
                 {
@@ -265,3 +274,33 @@ class Database:
                 ).rowcount
                 > 0
             )
+
+    def set_share_token(self, user_id: int, meeting_id: int, token: str | None) -> bool:
+        with self.conn() as c:
+            return (
+                c.execute(
+                    "UPDATE meetings SET share_token = ? WHERE id = ? AND user_id = ? AND status = 'done'",
+                    (token, meeting_id, user_id),
+                ).rowcount
+                > 0
+            )
+
+    def shared_meeting(self, token: str) -> dict[str, Any] | None:
+        with self.conn() as c:
+            row = c.execute(
+                "SELECT id, user_id FROM meetings WHERE share_token = ?", (token,)
+            ).fetchone()
+        if row is None:
+            return None
+        meeting = self.get_meeting(row["user_id"], row["id"])
+        if meeting is None:
+            return None
+        # Public view: drop private background, ownership, and progress details.
+        return {
+            "question": meeting["question"],
+            "mode": meeting["mode"],
+            "created_at": meeting["created_at"],
+            "verdict": meeting["verdict"],
+            "takes": meeting["takes"],
+            "steps": [{**s, "id": 0, "done": False} for s in meeting["steps"]],
+        }

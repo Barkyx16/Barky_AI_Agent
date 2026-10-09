@@ -19,6 +19,7 @@ Boardroom gives anyone a private board of AI advisors. You bring a decision ("Sh
 - **Verdict card.** Headline, confidence ring, each advisor's vote, risks, first move, and an action plan.
 - **Plan tracking.** Check off steps; progress shows in the sidebar for every meeting.
 - **Follow-ups.** Reconvene the board on an earlier decision ("What if I wait six months?") with the earlier verdict as context.
+- **Shareable verdicts.** One click creates a public read-only link to the debate and verdict, with a sign-up call to action. Private background notes and progress are never shared.
 - **Accounts and plans.** Email sign-up, a free daily quota, and a Pro plan with unlimited meetings and deep debates.
 - **Demo mode.** Runs with scripted advisors when no API key is set, so anyone can try the full experience.
 - **Polished UI.** Responsive from phone to desktop, light and dark themes, keyboard shortcuts (⌘/Ctrl+Enter), accessible markup, and no build step.
@@ -73,7 +74,7 @@ browser ──POST /api/meetings──▶ FastAPI ──▶ meeting.run_meeting(
 - `boardroom/board.py`: advisor personas, prompts, and the verdict schema.
 - `boardroom/engine.py`: the Claude engine (streaming, adaptive thinking, web search, server-side refusal fallbacks) and the demo engine.
 - `boardroom/meeting.py`: runs the rounds and merges advisor streams into one event feed.
-- `boardroom/app.py`: API, auth, quotas, and security headers.
+- `boardroom/app.py`: API, auth (with login throttling), quotas, share links, and security headers.
 - `boardroom/static/`: the single-page front end, in plain HTML, CSS, and JS.
 
 ## Tests
@@ -87,6 +88,5 @@ python -m pytest
 
 1. Stripe Checkout and a billing webhook that calls `set_plan`.
 2. Password reset and email verification.
-3. Shareable read-only verdict links, so every shared verdict is an ad.
-4. Reminder emails for plan steps and the review date.
-5. Custom boards: let users add advisors (e.g. "My Accountant", "Devil's Advocate") or seat famous-thinker personas.
+3. Reminder emails for plan steps and the review date.
+4. Custom boards: let users add advisors (e.g. "My Accountant", "Devil's Advocate") or seat famous-thinker personas.

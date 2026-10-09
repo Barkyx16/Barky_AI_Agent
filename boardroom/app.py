@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import json
 import re
+import secrets
 import sqlite3
+import time
+from collections import defaultdict, deque
 from pathlib import Path
 from typing import Literal
 
@@ -56,6 +59,19 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     app = FastAPI(title="Boardroom", docs_url=None, redoc_url=None)
     app.state.db = db
     app.state.engine = engine
+    login_attempts: dict[str, deque] = defaultdict(deque)
+
+    def throttle(key: str, limit: int = 8, window: float = 300.0) -> None:
+        """Slow down password guessing: at most `limit` attempts per key per window."""
+        now = time.monotonic()
+        attempts = login_attempts[key]
+        while attempts and now - attempts[0] > window:
+            attempts.popleft()
+        if len(attempts) >= limit:
+            raise HTTPException(
+                status_code=429, detail="Too many attempts. Please wait a few minutes and try again."
+            )
+        attempts.append(now)
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
@@ -121,10 +137,14 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         return user_out(db.user_by_id(user_id))
 
     @app.post("/api/login")
-    def login(body: LoginIn, response: Response):
-        user = db.user_by_email(body.email.strip().lower())
+    def login(body: LoginIn, request: Request, response: Response):
+        email = body.email.strip().lower()
+        throttle(f"email:{email}")
+        throttle(f"ip:{request.client.host if request.client else '?'}", limit=30)
+        user = db.user_by_email(email)
         if user is None or not auth.verify_password(body.password, user["pw_hash"]):
             raise HTTPException(status_code=401, detail="Email or password is incorrect.")
+        login_attempts.pop(f"email:{email}", None)
         start_session(response, user["id"])
         return user_out(user)
 
@@ -158,6 +178,31 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         if not db.delete_meeting(user["id"], meeting_id):
             raise HTTPException(status_code=404, detail="Meeting not found.")
         return {"ok": True}
+
+    @app.post("/api/meetings/{meeting_id}/share")
+    def share(meeting_id: int, user=Depends(current_user)):
+        found = db.get_meeting(user["id"], meeting_id)
+        if found is None:
+            raise HTTPException(status_code=404, detail="Meeting not found.")
+        if found["status"] != "done":
+            raise HTTPException(status_code=409, detail="Only finished meetings can be shared.")
+        token = found["share_token"] or secrets.token_urlsafe(12)
+        db.set_share_token(user["id"], meeting_id, token)
+        return {"token": token}
+
+    @app.delete("/api/meetings/{meeting_id}/share")
+    def unshare(meeting_id: int, user=Depends(current_user)):
+        if db.get_meeting(user["id"], meeting_id) is None:
+            raise HTTPException(status_code=404, detail="Meeting not found.")
+        db.set_share_token(user["id"], meeting_id, None)
+        return {"ok": True}
+
+    @app.get("/api/shared/{token}")
+    def shared(token: str):
+        found = db.shared_meeting(token)
+        if found is None:
+            raise HTTPException(status_code=404, detail="This link is no longer shared.")
+        return found
 
     @app.patch("/api/steps/{step_id}")
     def update_step(step_id: int, body: StepIn, user=Depends(current_user)):
