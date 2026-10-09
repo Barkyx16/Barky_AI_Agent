@@ -7,7 +7,9 @@ web layer forwards to the browser as server-sent events.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import re
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, AsyncIterator
 
@@ -115,10 +117,32 @@ async def run_meeting(
             rounds.append(dict((a.key, rebuttals.get(a.key, "")) for a in board))
 
         yield {"type": "chair_start"}
-        verdict = await engine.verdict(
+        drafts: asyncio.Queue = asyncio.Queue()
+        chair = asyncio.create_task(engine.verdict(
             chair_prompt(question, context, today, rounds, by_key),
             on_usage=lambda u: add_usage(usage, u),
-        )
+            on_draft=drafts.put_nowait,
+        ))
+        try:
+            shown: dict[str, str] = {}
+            while not chair.done() or not drafts.empty():
+                getter = asyncio.ensure_future(drafts.get())
+                done, _ = await asyncio.wait({chair, getter}, return_when=asyncio.FIRST_COMPLETED)
+                if getter not in done:
+                    getter.cancel()
+                    continue
+                text = getter.result()
+                while not drafts.empty():  # skip ahead to the newest draft
+                    text = drafts.get_nowait()
+                draft = {k: partial_field(text, k) for k in ("headline", "verdict")}
+                if draft != shown and any(draft.values()):
+                    shown = draft
+                    yield {"type": "chair_draft", **draft}
+            verdict = await chair
+        finally:
+            if not chair.done():
+                chair.cancel()
+                await asyncio.gather(chair, return_exceptions=True)
         data = verdict.model_dump()
         data["confidence"] = max(0, min(100, int(data["confidence"])))
         data["votes"] = [v for v in data["votes"] if v["advisor"] in by_key]
@@ -147,6 +171,26 @@ async def run_meeting(
             # The server stopped mid-meeting.
             db.fail_meeting(meeting_id, status="interrupted")
         db.record_usage(meeting_id, usage, prices.cost(usage))
+
+
+_FIELD_RE = {}
+
+
+def partial_field(text: str, field: str) -> str:
+    """The (possibly unfinished) value of a top-level string field in streaming JSON."""
+    pattern = _FIELD_RE.get(field)
+    if pattern is None:
+        pattern = _FIELD_RE[field] = re.compile(rf'"{field}"\s*:\s*"((?:[^"\\]|\\.)*)')
+    match = pattern.search(text)
+    if not match:
+        return ""
+    raw = match.group(1)
+    if raw.endswith("\\") and not raw.endswith("\\\\"):
+        raw = raw[:-1]  # an escape sequence cut in half
+    try:
+        return json.loads(f'"{raw}"')
+    except ValueError:
+        return raw.replace('\\"', '"')
 
 
 def db_meeting_steps(db: Database, meeting_id: int) -> list[dict[str, Any]]:

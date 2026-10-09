@@ -346,8 +346,14 @@ button, input, textarea { font: inherit; color: inherit; }
 .toggle { display: flex; gap: 10px; align-items: center; font-size: 14px; cursor: pointer; }
 .toggle input { width: 16px; height: 16px; accent-color: var(--accent); }
 
-.chair-wait { display: flex; gap: 14px; align-items: center; padding: 22px; }
-.chair-wait p { margin: 0; color: var(--text-2); }
+.chair-wait { padding: 22px; }
+.chair-wait-head { display: flex; gap: 14px; align-items: center; }
+.chair-wait-head p { margin: 0; color: var(--text-2); }
+.chair-wait-head .spinner { margin-left: auto; }
+.chair-draft h2 { font-size: clamp(22px, 2.6vw, 30px); margin-top: 14px; }
+.chair-draft h2:empty, .chair-draft p:empty { display: none; }
+.chair-draft .why { color: var(--text-2); font-size: 15.5px; margin-top: 10px; max-width: 68ch; }
+.caret-inline::after { content: "▍"; color: var(--accent); animation: pulse 1s steps(2) infinite; margin-left: 1px; }
 
 .followup { margin-top: 30px; }
 .followup .row { display: flex; gap: 10px; }

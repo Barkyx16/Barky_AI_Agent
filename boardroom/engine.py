@@ -31,7 +31,12 @@ class Engine(Protocol):
 
     def take(self, advisor: Advisor, prompt: str) -> AsyncIterator[Event]: ...
 
-    async def verdict(self, prompt: str, on_usage: Callable[[dict], None] | None = None) -> Verdict: ...
+    async def verdict(
+        self,
+        prompt: str,
+        on_usage: Callable[[dict], None] | None = None,
+        on_draft: Callable[[str], None] | None = None,
+    ) -> Verdict: ...
 
 
 class ClaudeEngine:
@@ -93,9 +98,16 @@ class ClaudeEngine:
         if sources:
             yield ("sources", [{"url": u, "title": t} for u, t in sources.items()])
 
-    async def verdict(self, prompt: str, on_usage: Callable[[dict], None] | None = None) -> Verdict:
+    async def verdict(
+        self,
+        prompt: str,
+        on_usage: Callable[[dict], None] | None = None,
+        on_draft: Callable[[str], None] | None = None,
+    ) -> Verdict:
+        # Streamed so the verdict's JSON can be shown as it's written (see on_draft).
+        draft = ""
         try:
-            response = await self.client.beta.messages.parse(
+            async with self.client.beta.messages.stream(
                 model=self.model,
                 max_tokens=16000,
                 system=CHAIR_SYSTEM,
@@ -105,9 +117,16 @@ class ClaudeEngine:
                 output_format=Verdict,
                 betas=[FALLBACK_BETA],
                 fallbacks="default",
-            )
+            ) as stream:
+                async for event in stream:
+                    if event.type == "text" and on_draft:
+                        draft += event.text
+                        on_draft(draft)
+                response = await stream.get_final_message()
         except anthropic.APIError as exc:
             raise EngineError(_friendly(exc)) from exc
+        except ValueError as exc:  # the final JSON didn't match the schema
+            raise EngineError("The Chair's verdict came back garbled. Please try again.") from exc
         if on_usage:
             on_usage(_usage(response))
         if response.stop_reason == "refusal" or response.parsed_output is None:
@@ -239,9 +258,22 @@ class DemoEngine:
             yield ("text", word if i == 0 else " " + word)
             await asyncio.sleep(self.delay)
 
-    async def verdict(self, prompt: str, on_usage: Callable[[dict], None] | None = None) -> Verdict:
-        await asyncio.sleep(self.delay * 30)
-        t = _topic(prompt)
+    async def verdict(
+        self,
+        prompt: str,
+        on_usage: Callable[[dict], None] | None = None,
+        on_draft: Callable[[str], None] | None = None,
+    ) -> Verdict:
+        await asyncio.sleep(self.delay * 10)
+        result = self._demo_verdict(_topic(prompt))
+        if on_draft:
+            text = result.model_dump_json()
+            for end in range(12, len(text) + 12, 12):
+                on_draft(text[:end])
+                await asyncio.sleep(self.delay)
+        return result
+
+    def _demo_verdict(self, t: str) -> Verdict:
         return Verdict.model_validate(
             {
                 "headline": "Test it small before you commit fully.",

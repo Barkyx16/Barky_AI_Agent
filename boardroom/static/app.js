@@ -842,6 +842,9 @@ function handleEvent(live, ev) {
     case "chair_start":
       live.chair = "deliberating";
       break;
+    case "chair_draft":
+      live.draft = { headline: ev.headline, verdict: ev.verdict };
+      break;
     case "verdict":
       live.verdict = ev.verdict;
       live.chair = "done";
@@ -886,6 +889,14 @@ function renderLive() {
     applyStyles(view);
     bindMeetingActions(view, live);
     return;
+  }
+  if (live.chair === "deliberating" && live.draft) {
+    const h = view.querySelector("#draft-headline");
+    const v = view.querySelector("#draft-verdict");
+    const st = view.querySelector("#chair-status");
+    if (h) h.textContent = live.draft.headline;
+    if (v) v.textContent = live.draft.verdict;
+    if (st && live.draft.headline) st.textContent = "The Chair is ruling…";
   }
   for (const round of live.rounds) {
     for (const a of seatsFor(live.guest)) {
@@ -1026,7 +1037,13 @@ function chairSection(m) {
   if (m.verdict) return `<div class="section-title">The verdict</div>` + verdictCard(m.verdict, m.steps, false, m.guest, addDaysIso(m.verdict.review_in_days || 30)) + followupBox();
   if (m.chair === "deliberating") {
     return `<div class="section-title">The verdict</div>
-      <div class="card chair-wait"><div class="avatar" data-c="${chair.color}">${chair.initials}</div><p>The Chair is weighing the arguments…</p><div class="spinner"></div></div>`;
+      <div class="card chair-wait">
+        <div class="chair-wait-head"><div class="avatar" data-c="${chair.color}">${chair.initials}</div><p id="chair-status">${m.draft && m.draft.headline ? "The Chair is ruling…" : "The Chair is weighing the arguments…"}</p><div class="spinner"></div></div>
+        <div class="chair-draft">
+          <h2 id="draft-headline">${esc(m.draft?.headline || "")}</h2>
+          <p class="why caret-inline" id="draft-verdict">${esc(m.draft?.verdict || "")}</p>
+        </div>
+      </div>`;
   }
   return "";
 }

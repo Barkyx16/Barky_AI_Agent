@@ -634,7 +634,7 @@ class MeteredEngine(DemoEngine):
         searches = 1 if advisor.key == "analyst" else 0
         yield ("usage", {"input_tokens": 1000, "output_tokens": 500, "web_searches": searches})
 
-    async def verdict(self, prompt, on_usage=None):
+    async def verdict(self, prompt, on_usage=None, on_draft=None):
         if on_usage:
             on_usage({"input_tokens": 3000, "output_tokens": 1000, "cache_read_tokens": 10000})
         return await super().verdict(prompt)
@@ -970,7 +970,7 @@ def test_ask_daily_limit_and_cost(tmp_path):
 
 def test_verdict_options_are_sorted_and_clamped(tmp_path):
     class WildOptions(DemoEngine):
-        async def verdict(self, prompt, on_usage=None):
+        async def verdict(self, prompt, on_usage=None, on_draft=None):
             v = await super().verdict(prompt)
             v.options[0].score = 140
             v.options[1].score = -5
@@ -1022,3 +1022,33 @@ def test_bad_or_self_referral_codes_do_nothing(tmp_path):
     client = make_client(tmp_path)
     r = client.post("/api/signup", json={"email": "x@example.com", "name": "X", "password": "password1", "ref": "nope"})
     assert r.status_code == 200 and r.json()["usage"]["bonus_meetings"] == 0
+
+
+# ---- streamed verdict drafts -------------------------------------------------
+
+
+def test_partial_field_handles_unfinished_json():
+    from boardroom.meeting import partial_field
+
+    assert partial_field('{"head', "headline") == ""
+    assert partial_field('{"headline": "Test it sm', "headline") == "Test it sm"
+    assert partial_field('{"headline": "Say \\"no\\" fir', "headline") == 'Say "no" fir'
+    assert partial_field('{"headline": "Line\\', "headline") == "Line"
+    assert partial_field('{"headline": "Done.", "verdict": "Because \\u00e9', "verdict") == "Because é"
+    assert partial_field('{"headline": "Done.", "verdict": "x"}', "headline") == "Done."
+
+
+def test_chair_drafts_stream_before_the_verdict(tmp_path):
+    client = make_client(tmp_path)
+    signup(client)
+    evs = events(client.post("/api/meetings", json={"question": "Stream the verdict?"}))
+    kinds = [e["type"] for e in evs]
+    drafts = [e for e in evs if e["type"] == "chair_draft"]
+    assert len(drafts) > 3
+    assert kinds.index("chair_start") < kinds.index("chair_draft") < kinds.index("verdict")
+    final = next(e["verdict"] for e in evs if e["type"] == "verdict")
+    assert drafts[-1]["headline"] == final["headline"]
+    assert final["verdict"].startswith(drafts[-1]["verdict"])
+    # Drafts only ever grow.
+    heads = [d["headline"] for d in drafts]
+    assert all(b.startswith(a) for a, b in zip(heads, heads[1:]))
