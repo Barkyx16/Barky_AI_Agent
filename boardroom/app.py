@@ -94,6 +94,11 @@ class AskIn(BaseModel):
     question: str = Field(min_length=3, max_length=1000)
 
 
+class OutcomeIn(BaseModel):
+    outcome: Literal["great", "mixed", "bad"] | None
+    note: str = Field(default="", max_length=1000)
+
+
 class StepIn(BaseModel):
     done: bool
 
@@ -505,6 +510,12 @@ def create_app(
             )
             if obj.get("customer"):
                 db.set_plan_by_customer(obj["customer"], "pro" if active else "free")
+        return {"ok": True}
+
+    @app.patch("/api/meetings/{meeting_id}/outcome")
+    def set_outcome(meeting_id: int, body: OutcomeIn, user=Depends(current_user)):
+        if not db.set_outcome(user["id"], meeting_id, body.outcome, body.note.strip()):
+            raise HTTPException(status_code=404, detail="Finished meeting not found.")
         return {"ok": True}
 
     @app.patch("/api/steps/{step_id}")

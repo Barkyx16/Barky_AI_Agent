@@ -24,6 +24,7 @@ Boardroom gives anyone a private board of AI advisors. You bring a decision ("Sh
 - **Print or save as PDF.** Clean, ink-friendly verdict printouts.
 - **Account control.** Reset a forgotten password by email, change your password (which signs out other devices) download all your data as JSON, or delete your account and all its data.
 - **Review dates and reminders.** The Chair sets a date to revisit each decision. On that date the sidebar flags it, "Hold a review" starts a follow-up meeting, and (with SMTP configured) the user gets an email reminder they can turn off in settings.
+- **Outcomes.** Users mark how each decision turned out (went well, mixed, didn't work out) with a note. The sidebar shows it, and the owner dashboard reports the share of decisions that went well.
 - **Plan tracking.** Check off steps; progress shows in the sidebar for every meeting.
 - **Follow-ups.** Reconvene the board on an earlier decision ("What if I wait six months?") with the earlier verdict as context.
 - **Sample meeting.** Visitors can read a full example meeting from the landing page before signing up.

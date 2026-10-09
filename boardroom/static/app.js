@@ -393,7 +393,7 @@ function renderHistory() {
   el.innerHTML = `<h4>${q ? `${shown.length} found` : "Your meetings"}</h4>` + shown.map((m) => {
     const pct = m.total_steps ? Math.round((100 * m.done_steps) / m.total_steps) : 0;
     const meta = m.status === "done"
-      ? `<span class="mini-bar"><i data-w="${pct}"></i></span><span>${m.done_steps}/${m.total_steps}</span>${isDue(m.review_at) ? '<span class="due">Review due</span>' : ""}`
+      ? `<span class="mini-bar"><i data-w="${pct}"></i></span><span>${m.done_steps}/${m.total_steps}</span>${m.outcome ? `<span class="out out-${esc(m.outcome)}">${esc((OUTCOMES.find(([k]) => k === m.outcome) || ["", ""])[1])}</span>` : isDue(m.review_at) ? '<span class="due">Review due</span>' : ""}`
       : `<span>${m.status === "running" ? "In session" : "Unfinished"}</span>`;
     return `<a href="#/m/${m.id}" ${state.meetingId === m.id ? 'aria-current="page"' : ""}>
       <div class="q">${esc(m.headline || m.question)}</div>
@@ -1034,7 +1034,7 @@ async function askAdvisor(m, key, question, card) {
 
 function chairSection(m) {
   const chair = advisorsByKey().chair;
-  if (m.verdict) return `<div class="section-title">The verdict</div>` + verdictCard(m.verdict, m.steps, false, m.guest, addDaysIso(m.verdict.review_in_days || 30)) + followupBox();
+  if (m.verdict) return `<div class="section-title">The verdict</div>` + verdictCard(m.verdict, m.steps, false, m.guest, addDaysIso(m.verdict.review_in_days || 30), { value: m.outcome, note: m.outcome_note }) + followupBox();
   if (m.chair === "deliberating") {
     return `<div class="section-title">The verdict</div>
       <div class="card chair-wait">
@@ -1064,7 +1064,25 @@ function optionsChart(options) {
   </section>`;
 }
 
-function verdictCard(v, steps, readonly = false, guest = null, reviewAt = null) {
+const OUTCOMES = [["great", "Went well"], ["mixed", "Mixed"], ["bad", "Didn't work out"]];
+
+function outcomeBox(outcome, note) {
+  return `<div class="outcome" data-outcome>
+    <div class="outcome-row">
+      <span class="outcome-q">${outcome ? "How it turned out" : "How did it turn out?"}</span>
+      <div class="segmented" role="group" aria-label="Outcome">
+        ${OUTCOMES.map(([k, label]) => `<button type="button" data-outcome-pick="${k}" aria-pressed="${outcome === k}">${label}</button>`).join("")}
+      </div>
+    </div>
+    <form class="outcome-note" ${outcome ? "" : "hidden"}>
+      <label class="sr-only" for="outcome-note">What happened?</label>
+      <input class="input" id="outcome-note" maxlength="1000" placeholder="What happened? (optional)" value="${esc(note || "")}">
+      <button class="btn btn-sm" type="submit">Save note</button>
+    </form>
+  </div>`;
+}
+
+function verdictCard(v, steps, readonly = false, guest = null, reviewAt = null, outcome = undefined) {
   const by = advisorsByKey(guest);
   const chair = by.chair;
   const done = steps.filter((s) => s.done).length;
@@ -1100,6 +1118,7 @@ function verdictCard(v, steps, readonly = false, guest = null, reviewAt = null) 
         <b>${reviewAt ? `Review ${isDue(reviewAt) ? "due" : "on"} ${esc(fmtDay(reviewAt))}:` : "Review:"}</b><span>${esc(v.review)}</span>
         ${!readonly && isDue(reviewAt) ? `<button class="btn btn-primary btn-sm" data-act="review">Hold a review</button>` : ""}
       </div>
+      ${!readonly && outcome !== undefined ? outcomeBox(outcome?.value, outcome?.note) : ""}
     </div>
   </article>`;
 }
@@ -1149,6 +1168,28 @@ function bindMeetingActions(view, m) {
     if (ok) input.value = "";
     input.focus();
   }));
+  const box = view.querySelector("[data-outcome]");
+  if (box) {
+    const save = async (value, note) => {
+      await api(`/api/meetings/${m.id}/outcome`, { method: "PATCH", body: { outcome: value, note } });
+      m.outcome = value; m.outcome_note = note;
+    };
+    box.querySelectorAll("[data-outcome-pick]").forEach((b) => b.addEventListener("click", async () => {
+      const value = m.outcome === b.dataset.outcomePick ? null : b.dataset.outcomePick;  // click again to clear
+      try {
+        await save(value, value ? (m.outcome_note || "") : "");
+        box.querySelectorAll("[data-outcome-pick]").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.outcomePick === value)));
+        box.querySelector(".outcome-q").textContent = value ? "How it turned out" : "How did it turn out?";
+        box.querySelector(".outcome-note").hidden = !value;
+        if (value) { toast("Outcome saved. Thanks for closing the loop."); box.querySelector("#outcome-note").focus(); }
+        refreshSidebar();
+      } catch (err) { toast(err.message); }
+    }));
+    box.querySelector(".outcome-note").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      try { await save(m.outcome, box.querySelector("#outcome-note").value.trim()); toast("Note saved"); } catch (err) { toast(err.message); }
+    });
+  }
   view.querySelector('[data-act="review"]')?.addEventListener("click", () => {
     const input = view.querySelector("#fu");
     if (!input) return;
@@ -1236,7 +1277,7 @@ async function loadMeeting(id) {
     const r = t ? { text: t.text, done: true, status: "Done", sources: t.sources } : { text: "", done: true, status: "Sat out", sources: [] };
     return remarkCard(a, r, round, round === 1 && m.status === "done" && t ? (m.asks || []).filter((x) => x.advisor === a.key) : null);
   }).join(""))
-    + (m.verdict ? `<div class="section-title">The verdict</div>${verdictCard(m.verdict, m.steps, false, m.guest, m.review_at)}${followupBox()}` : "")
+    + (m.verdict ? `<div class="section-title">The verdict</div>${verdictCard(m.verdict, m.steps, false, m.guest, m.review_at, { value: m.outcome, note: m.outcome_note })}${followupBox()}` : "")
     + (stalled ? errorBox(m.status === "running" ? "This meeting is still in session. Refresh in a moment to see the result." : "This meeting didn't finish.") : "");
   applyStyles(view);
   bindMeetingActions(view, m);
@@ -1381,14 +1422,17 @@ async function renderAdmin() {
       <p>How Boardroom is doing. Costs are estimates from API token usage${st.engine === "demo" ? " (demo mode makes no API calls, so costs read $0)" : ""}.</p></div>
     <div class="kpis">
       ${statTile("Estimated monthly revenue", fmtUsd(st.revenue.mrr_estimate_usd, 0), `${fmtInt(st.users.pro)} Pro × ${fmtUsd(st.revenue.pro_price_usd, 0)}`, true)}
-      ${statTile("Users", fmtInt(st.users.total), `${fmtInt(st.users.new_7d)} new this week`)}
-      ${statTile("Active this week", fmtInt(st.users.active_7d), "held at least one meeting")}
+      ${statTile("Users", fmtInt(st.users.total), `${fmtInt(st.users.new_7d)} new · ${fmtInt(st.users.active_7d)} active this week`)}
       ${statTile("Meetings", fmtInt(st.meetings.last_7d), `last 7 days · ${fmtInt(st.meetings.today)} today`)}
       ${statTile("Failure rate", fmtPct(st.meetings.failure_rate_7d), "last 7 days")}
       ${statTile("API cost", fmtUsd(st.cost.last_30d_usd), "last 30 days")}
       ${statTile("Cost per meeting", fmtUsd(st.cost.avg_per_meeting_usd, 3), "average, finished meetings")}
       ${statTile("Revenue minus API cost", fmtUsd(margin, 0), "monthly estimate vs last 30 days")}
       ${statTile("Shared verdicts", fmtInt(st.meetings.shared), "public links, all time")}
+      ${(() => {
+        const o = st.outcomes, rated = o.great + o.mixed + o.bad;
+        return statTile("Decisions that went well", rated ? fmtPct(o.great / rated) : "—", rated ? `${fmtInt(rated)} outcome${rated === 1 ? "" : "s"} reported` : "no outcomes reported yet");
+      })()}
     </div>
     <div class="charts">
       <section class="card chart-card"><h3>Meetings per day</h3><p class="chart-sub">Last 14 days</p>${columnChart("ch-meetings", st.daily, "meetings", fmtInt)}</section>

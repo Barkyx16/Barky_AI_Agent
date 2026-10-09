@@ -1052,3 +1052,23 @@ def test_chair_drafts_stream_before_the_verdict(tmp_path):
     # Drafts only ever grow.
     heads = [d["headline"] for d in drafts]
     assert all(b.startswith(a) for a, b in zip(heads, heads[1:]))
+
+
+def test_record_decision_outcome(tmp_path):
+    client = make_client(tmp_path, admin_emails=("ada@example.com",))
+    signup(client)
+    meeting_id = events(client.post("/api/meetings", json={"question": "Did it work?"}))[0]["id"]
+    r = client.patch(f"/api/meetings/{meeting_id}/outcome", json={"outcome": "great", "note": "Got the job!"})
+    assert r.status_code == 200
+    m = client.get(f"/api/meetings/{meeting_id}").json()
+    assert m["outcome"] == "great" and m["outcome_note"] == "Got the job!"
+    assert client.get("/api/meetings").json()[0]["outcome"] == "great"
+    assert client.get("/api/admin/stats").json()["outcomes"] == {"great": 1, "mixed": 0, "bad": 0}
+    token = client.post(f"/api/meetings/{meeting_id}/share").json()["token"]
+    assert client.get(f"/api/shared/{token}").json()["outcome"] is None  # private
+    assert client.patch(f"/api/meetings/{meeting_id}/outcome", json={"outcome": "meh"}).status_code == 422
+    assert client.patch(f"/api/meetings/{meeting_id}/outcome", json={"outcome": None}).status_code == 200
+    assert client.get(f"/api/meetings/{meeting_id}").json()["outcome"] is None
+    client.post("/api/logout")
+    signup(client, email="eve@example.com")
+    assert client.patch(f"/api/meetings/{meeting_id}/outcome", json={"outcome": "bad"}).status_code == 404

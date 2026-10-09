@@ -342,6 +342,13 @@ button, input, textarea { font: inherit; color: inherit; }
 .review b { color: var(--text); white-space: nowrap; }
 .review.is-due { align-items: center; flex-wrap: wrap; background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); padding: 10px 12px; border-radius: var(--radius-sm); }
 .review.is-due .btn { margin-left: auto; }
+.history .out { margin-left: auto; font-weight: 600; }
+.history .out-great { color: var(--ok); } .history .out-mixed { color: var(--warn); } .history .out-bad { color: var(--bad); }
+.outcome { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 14px; }
+.outcome-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.outcome-q { font-size: 14px; font-weight: 600; }
+.outcome-note { display: flex; gap: 8px; margin-top: 10px; }
+.outcome-note .input { flex: 1; min-width: 0; padding: 8px 12px; font-size: 14px; }
 .history .due { color: var(--accent); font-weight: 650; margin-left: auto; }
 .toggle { display: flex; gap: 10px; align-items: center; font-size: 14px; cursor: pointer; }
 .toggle input { width: 16px; height: 16px; accent-color: var(--accent); }
@@ -383,7 +390,7 @@ button, input, textarea { font: inherit; color: inherit; }
 @media print {
   :root, :root:not([data-theme="light"]), :root[data-theme] { color-scheme: light; --bg: #fff; --bg-elev: #fff; --bg-sunk: #f4f4f4; --text: #000; --text-2: #333; --text-3: #666; --line: #ccc; --shadow: none; --accent-soft: #f6f1e6; }
   body { background: #fff; font-size: 12px; }
-  .ask-open, .ask-form, .sidebar, .topbar, .scrim, .head-actions, .demo-banner, .followup, .alert, #toast, .public-bar .btn, .cta { display: none !important; }
+  .outcome, .ask-open, .ask-form, .sidebar, .topbar, .scrim, .head-actions, .demo-banner, .followup, .alert, #toast, .public-bar .btn, .cta { display: none !important; }
   .shell { display: block; }
   .main { padding: 0; }
   .card, .panel, .step { break-inside: avoid; box-shadow: none; }

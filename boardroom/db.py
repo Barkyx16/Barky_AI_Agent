@@ -108,6 +108,9 @@ class Database:
                 c.execute("ALTER TABLE meetings ADD COLUMN guest TEXT")
             if "review_at" not in cols:
                 c.execute("ALTER TABLE meetings ADD COLUMN review_at TEXT")
+            for col in ("outcome", "outcome_note", "outcome_at"):
+                if col not in cols:
+                    c.execute(f"ALTER TABLE meetings ADD COLUMN {col} TEXT")
             if "reminded" not in cols:
                 c.execute("ALTER TABLE meetings ADD COLUMN reminded INTEGER NOT NULL DEFAULT 0")
             for col, kind in (
@@ -348,6 +351,14 @@ class Database:
                     (meeting_id, i, step["title"], step.get("detail", ""), step.get("when", "")),
                 )
 
+    def set_outcome(self, user_id: int, meeting_id: int, outcome: str | None, note: str) -> bool:
+        with self.conn() as c:
+            return c.execute(
+                "UPDATE meetings SET outcome = ?, outcome_note = ?, outcome_at = ? "
+                "WHERE id = ? AND user_id = ? AND status = 'done'",
+                (outcome, note if outcome else None, now_iso() if outcome else None, meeting_id, user_id),
+            ).rowcount > 0
+
     def add_ask(self, meeting_id: int, advisor: str, question: str, answer: str) -> None:
         with self.conn() as c:
             c.execute(
@@ -413,7 +424,7 @@ class Database:
     def list_meetings(self, user_id: int, limit: int = 100) -> list[dict[str, Any]]:
         with self.conn() as c:
             rows = c.execute(
-                "SELECT c.id, c.question, c.status, c.created_at, c.verdict, c.parent_id, c.review_at, "
+                "SELECT c.id, c.question, c.status, c.created_at, c.verdict, c.parent_id, c.review_at, c.outcome, "
                 "(SELECT COUNT(*) FROM steps s WHERE s.meeting_id = c.id) AS total_steps, "
                 "(SELECT COUNT(*) FROM steps s WHERE s.meeting_id = c.id AND s.done) AS done_steps "
                 "FROM meetings c WHERE c.user_id = ? ORDER BY c.id DESC LIMIT ?",
@@ -431,6 +442,7 @@ class Database:
                     "parent_id": r["parent_id"],
                     "headline": verdict.get("headline") if verdict else None,
                     "review_at": r["review_at"],
+                    "outcome": r["outcome"],
                     "total_steps": r["total_steps"],
                     "done_steps": r["done_steps"],
                 }
@@ -468,6 +480,8 @@ class Database:
             "created_at": row["created_at"],
             "share_token": row["share_token"],
             "review_at": row["review_at"],
+            "outcome": row["outcome"],
+            "outcome_note": row["outcome_note"] or "",
             "guest": json.loads(row["guest"]) if row["guest"] else None,
             "verdict": json.loads(row["verdict"]) if row["verdict"] else None,
             "takes": [
@@ -541,6 +555,8 @@ class Database:
             "verdict": meeting["verdict"],
             "takes": meeting["takes"],
             "asks": [],
+            "outcome": None,
+            "outcome_note": "",
             "steps": [{**s, "id": 0, "done": False} for s in meeting["steps"]],
         }
 
@@ -564,6 +580,9 @@ class Database:
                 "SELECT COUNT(*) FROM meetings WHERE created_at >= ? AND status IN ('failed', 'interrupted')", d7
             )
             shared = one("SELECT COUNT(*) FROM meetings WHERE share_token IS NOT NULL")
+            outcomes = dict(c.execute(
+                "SELECT outcome, COUNT(*) FROM meetings WHERE outcome IS NOT NULL GROUP BY outcome"
+            ).fetchall())
             cost_30d = one("SELECT SUM(cost_usd) FROM meetings WHERE created_at >= ?", d30)
             cost_today = one("SELECT SUM(cost_usd) FROM meetings WHERE created_at >= ?", today.isoformat())
             avg_cost = one(
@@ -597,6 +616,7 @@ class Database:
                 "failure_rate_7d": round(failed_7d / m_7d, 4) if m_7d else 0.0,
                 "shared": shared,
             },
+            "outcomes": {k: outcomes.get(k, 0) for k in ("great", "mixed", "bad")},
             "cost": {
                 "today_usd": round(cost_today, 4),
                 "last_30d_usd": round(cost_30d, 4),
