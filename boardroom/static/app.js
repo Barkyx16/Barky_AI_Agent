@@ -934,11 +934,11 @@ function verdictCard(v, steps, readonly = false, guest = null, reviewAt = null) 
         <h2>${esc(v.headline)}</h2>
         <p class="why">${esc(v.verdict)}</p>
       </div>
-      <div class="ring" data-p="${v.confidence}" role="img" aria-label="Confidence ${v.confidence} percent"><div><div><strong>${v.confidence}%</strong><span>confidence</span></div></div></div>
+      <div class="ring" data-p="${Number(v.confidence)}" role="img" aria-label="Confidence ${Number(v.confidence)} percent"><div><div><strong>${Number(v.confidence)}%</strong><span>confidence</span></div></div></div>
     </div>
     <div class="votes">${v.votes.map((x) => {
       const a = by[x.advisor];
-      return a ? `<span class="vote" title="${esc(x.reason)}"><span class="avatar sm" data-c="${a.color}">${a.initials}</span><span class="pos ${x.position}">${x.position}</span><span class="reason">${esc(x.reason)}</span></span>` : "";
+      return a ? `<span class="vote" title="${esc(x.reason)}"><span class="avatar sm" data-c="${esc(a.color)}">${esc(a.initials)}</span><span class="pos ${esc(x.position)}">${esc(x.position)}</span><span class="reason">${esc(x.reason)}</span></span>` : "";
     }).join("")}</div>
     <div class="verdict-cols">
       <div class="panel first-move"><h3>Your first move · next 24 hours</h3><p>${esc(v.first_move)}</p></div>

@@ -810,3 +810,59 @@ async def test_cancelling_a_run_stops_it():
     assert not run.task.done()
     await hub.cancel_user(1)
     assert run.task.done() and run.finished
+
+
+# ---- security hardening ----------------------------------------------------
+
+
+def test_session_tokens_are_hashed_at_rest(tmp_path):
+    client = make_client(tmp_path)
+    signup(client)
+    token = client.cookies.get("boardroom_session")
+    with client.app.state.db.conn() as c:
+        stored = [r[0] for r in c.execute("SELECT token FROM sessions")]
+    assert token not in stored
+    assert all(len(t) == 64 for t in stored)
+    assert client.get("/api/me").status_code == 200
+
+
+def test_email_features_need_a_public_url(tmp_path):
+    mailer = FakeMailer()
+    app = create_app(settings(tmp_path), engine=DemoEngine(delay=0), mailer=mailer)
+    client = TestClient(app)
+    assert client.get("/api/config").json()["password_reset"] is False
+    signup(client)
+    r = client.post("/api/password/forgot", json={"email": "ada@example.com"}, headers={"host": "evil.example"})
+    assert r.status_code == 404 and mailer.sent == []
+
+
+def test_reset_links_ignore_the_host_header(tmp_path):
+    client, mailer = reset_client(tmp_path)
+    signup(client)
+    client.post("/api/password/forgot", json={"email": "ada@example.com"}, headers={"host": "evil.example"})
+    assert "https://boardroom.app/#/reset/" in mailer.sent[-1][2]
+    assert "evil.example" not in mailer.sent[-1][2]
+
+
+def test_concurrent_meeting_limit(tmp_path):
+    client = make_client(tmp_path, max_concurrent_meetings=1)
+    signup(client)
+    hub = client.app.state.hub
+    uid = client.app.state.db.user_by_email("ada@example.com")["id"]
+    from boardroom.hub import MeetingRun
+
+    hub.runs[999] = MeetingRun(uid)  # pretend one is still in session
+    r = client.post("/api/meetings", json={"question": "One more?"})
+    assert r.status_code == 429 and "in session" in r.json()["detail"]
+    hub.runs[999].finished = True
+    assert client.post("/api/meetings", json={"question": "Now?"}).status_code == 200
+
+
+def test_pro_fair_use_cap(tmp_path):
+    client = make_client(tmp_path, engine=PaidEngine(delay=0), demo_mode=False, pro_daily_limit=2)
+    signup(client)
+    client.app.state.db.set_plan("ada@example.com", "pro")
+    for _ in range(2):
+        assert client.post("/api/meetings", json={"question": "Pro question"}).status_code == 200
+    r = client.post("/api/meetings", json={"question": "Third"})
+    assert r.status_code == 429 and "fair-use" in r.json()["detail"]

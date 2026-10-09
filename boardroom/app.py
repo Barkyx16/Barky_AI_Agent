@@ -103,6 +103,11 @@ def create_app(
             settings.smtp_host, settings.smtp_port, settings.smtp_username,
             settings.smtp_password, settings.smtp_from,
         )
+    if mailer is not None and not settings.public_url:
+        # Links in emails must never be built from the request's Host header, which an
+        # attacker controls (it would let them receive other people's reset tokens).
+        log.warning("email is disabled: set BOARDROOM_PUBLIC_URL to enable password reset and reminders")
+        mailer = None
     if billing is None and settings.billing_enabled:
         billing = Billing(settings.stripe_secret_key, settings.stripe_price_id, settings.stripe_webhook_secret)
     db = Database(settings.db_path)
@@ -119,10 +124,7 @@ def create_app(
         if mailer is None:
             return 0
         sent = 0
-        base = settings.public_url or app.state.seen_base_url
-        if not base:
-            log.warning("skipping review reminders: set BOARDROOM_PUBLIC_URL so emails can link to the app")
-            return 0
+        base = settings.public_url
         for due in db.due_reviews(datetime.now(timezone.utc).date().isoformat()):
             try:
                 mailer.send(
@@ -160,7 +162,7 @@ def create_app(
     app.state.db = db
     app.state.hub = hub
     app.state.send_review_reminders = send_review_reminders
-    app.state.seen_base_url = ""
+
     app.state.engine = engine
     login_attempts: dict[str, deque] = defaultdict(deque)
 
@@ -182,8 +184,6 @@ def create_app(
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
-        if not app.state.seen_base_url:
-            app.state.seen_base_url = str(request.base_url).rstrip("/")
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
@@ -267,7 +267,7 @@ def create_app(
         throttle(f"email:{email}")
         throttle(f"ip:{request.client.host if request.client else '?'}", limit=30)
         user = db.user_by_email(email)
-        if user is None or not auth.verify_password(body.password, user["pw_hash"]):
+        if not auth.verify_password_or_dummy(body.password, user["pw_hash"] if user else None):
             raise HTTPException(status_code=401, detail="Email or password is incorrect.")
         login_attempts.pop(f"email:{email}", None)
         start_session(response, user["id"])
@@ -285,7 +285,7 @@ def create_app(
             token = secrets.token_urlsafe(32)
             expires = (datetime.now(timezone.utc) + timedelta(minutes=RESET_MINUTES)).isoformat(timespec="seconds")
             db.create_reset(_token_hash(token), user["id"], expires)
-            link = f"{settings.public_url or str(request.base_url).rstrip('/')}/#/reset/{token}"
+            link = f"{settings.public_url}/#/reset/{token}"
             try:
                 mailer.send(
                     user["email"],
@@ -500,6 +500,17 @@ def create_app(
                 status_code=429,
                 detail=f"You've used all {quota['daily_limit']} free meetings for today. "
                 "Upgrade to Pro for unlimited meetings, or come back tomorrow.",
+            )
+        if not demo and user["plan"] == "pro" and quota["used_today"] >= settings.pro_daily_limit:
+            raise HTTPException(
+                status_code=429,
+                detail=f"You've reached today's fair-use limit of {settings.pro_daily_limit} meetings. "
+                "It resets at midnight UTC.",
+            )
+        if hub.running_count(user["id"]) >= settings.max_concurrent_meetings:
+            raise HTTPException(
+                status_code=429,
+                detail="You already have meetings in session. Wait for one to finish before starting another.",
             )
         if body.mode == "deep" and not quota["deep_mode"]:
             raise HTTPException(status_code=403, detail="Deep debates are a Pro feature.")

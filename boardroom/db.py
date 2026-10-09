@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 from contextlib import contextmanager
@@ -61,6 +62,11 @@ CREATE TABLE IF NOT EXISTS steps (
 """
 
 
+def _h(token: str) -> str:
+    """Session tokens are stored hashed, so a leaked database can't be used to sign in."""
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -96,7 +102,7 @@ class Database:
                 "CREATE UNIQUE INDEX IF NOT EXISTS meetings_share ON meetings(share_token) "
                 "WHERE share_token IS NOT NULL"
             )
-            c.execute("DELETE FROM sessions WHERE expires_at <= ?", (now_iso(),))
+            c.execute("DELETE FROM sessions WHERE expires_at <= ? OR length(token) != 64", (now_iso(),))
 
     @contextmanager
     def conn(self) -> Iterator[sqlite3.Connection]:
@@ -178,7 +184,7 @@ class Database:
 
     def delete_other_sessions(self, user_id: int, keep_token: str) -> None:
         with self.conn() as c:
-            c.execute("DELETE FROM sessions WHERE user_id = ? AND token != ?", (user_id, keep_token))
+            c.execute("DELETE FROM sessions WHERE user_id = ? AND token != ?", (user_id, _h(keep_token)))
 
     def create_reset(self, token_hash: str, user_id: int, expires_at: str) -> None:
         with self.conn() as c:
@@ -210,7 +216,7 @@ class Database:
         with self.conn() as c:
             c.execute(
                 "INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)",
-                (token, user_id, expires_at),
+                (_h(token), user_id, expires_at),
             )
 
     def session_user(self, token: str) -> sqlite3.Row | None:
@@ -218,12 +224,12 @@ class Database:
             return c.execute(
                 "SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id "
                 "WHERE s.token = ? AND s.expires_at > ?",
-                (token, now_iso()),
+                (_h(token), now_iso()),
             ).fetchone()
 
     def delete_session(self, token: str) -> None:
         with self.conn() as c:
-            c.execute("DELETE FROM sessions WHERE token = ?", (token,))
+            c.execute("DELETE FROM sessions WHERE token = ?", (_h(token),))
 
     # ---- meetings ---------------------------------------------------------
 

@@ -71,6 +71,9 @@ class MeetingHub:
         run = self.runs.get(meeting_id)
         return run if run and run.user_id == user_id else None
 
+    def running_count(self, user_id: int) -> int:
+        return sum(1 for r in self.runs.values() if r.user_id == user_id and not r.finished)
+
     async def cancel(self, meeting_id: int, user_id: int) -> None:
         run = self.get(meeting_id, user_id)
         if run and run.task and not run.task.done():

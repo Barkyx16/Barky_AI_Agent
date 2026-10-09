@@ -67,13 +67,15 @@ docker run -p 8000:8000 -e ANTHROPIC_API_KEY=sk-ant-... -v boardroom-data:/data 
 | `STRIPE_WEBHOOK_SECRET` | — | Signing secret for `/api/billing/webhook`. |
 | `BOARDROOM_PUBLIC_URL` | request URL | Your site's public URL, used for Stripe redirects. |
 | `BOARDROOM_PRO_PRICE_LABEL` | `$12/month` | Price text shown in the upgrade dialog. |
-| `SMTP_HOST` / `SMTP_PORT` | — / `587` | Outgoing mail server. Enables "Forgot password?" (port 465 uses SSL, others use STARTTLS). |
+| `SMTP_HOST` / `SMTP_PORT` | — / `587` | Outgoing mail server. Enables "Forgot password?" and review reminders (port 465 uses SSL, others use STARTTLS). **Requires `BOARDROOM_PUBLIC_URL`**: email links are never built from request headers. |
 | `SMTP_USERNAME` / `SMTP_PASSWORD` | — | SMTP login. |
 | `SMTP_FROM` | `SMTP_USERNAME` | The "From" address on emails. |
 | `BOARDROOM_ADMIN_EMAILS` | — | Comma-separated emails that can open the owner dashboard. |
 | `BOARDROOM_PRO_PRICE_USD` | `12` | Pro price as a number, for the revenue estimate. |
 | `BOARDROOM_PRICE_INPUT` / `_OUTPUT` / `_CACHE_WRITE` / `_CACHE_READ` | `4` / `20` / `5` / `0.20` | API prices in USD per million tokens, for cost tracking (Claude Opus 5.5 list prices). |
 | `BOARDROOM_PRICE_SEARCH` | `0.01` | Cost per web search. |
+| `BOARDROOM_MAX_CONCURRENT` | `2` | Meetings one user can have in session at once. |
+| `BOARDROOM_PRO_DAILY_LIMIT` | `50` | Fair-use cap on Pro meetings per day, so one account can't run up a huge API bill. |
 | `HOST` / `PORT` | `127.0.0.1` / `8000` | Where the server listens. |
 | `FORWARDED_ALLOW_IPS` | `127.0.0.1` | Behind a reverse proxy or load balancer, set this to the proxy's IP (or `*`) so rate limits see real client IPs. |
 
@@ -110,6 +112,15 @@ browser ──POST /api/meetings──▶ FastAPI ──▶ meeting.run_meeting(
 - `boardroom/billing.py`: Stripe Checkout, customer portal, and webhook signature checks.
 - `boardroom/app.py`: API, auth (with login throttling), quotas, share links, and security headers.
 - `boardroom/static/`: the single-page front end, in plain HTML, CSS, and JS.
+
+## Security
+
+- Passwords: PBKDF2-SHA256 (240k iterations). Session and reset tokens are stored only as SHA-256 hashes.
+- Cookies are `HttpOnly` and `SameSite=Lax` (`Secure` with `BOARDROOM_SECURE_COOKIES=1`). A strict Content-Security-Policy allows no inline scripts.
+- Login, sign-up and password-reset requests are rate-limited, and login takes the same time whether or not the email exists.
+- Users can only see and change their own meetings. Shared pages strip private background notes and progress.
+- The Stripe webhook verifies signatures and grants Pro only for paid checkouts.
+- Spending guards: free daily quota, a Pro fair-use cap, and a limit on concurrent meetings per user.
 
 ## Tests
 
