@@ -273,6 +273,11 @@ class DemoEngine:
                 ],
                 "review": "In 30 days, compare the test results with your definition of success.",
                 "review_in_days": 30,
+                "options": [
+                    {"name": "Run a small test first", "score": 82, "summary": "Real evidence in weeks, with the downside capped."},
+                    {"name": "Commit fully now", "score": 48, "summary": "Fastest path, but bets everything on untested assumptions."},
+                    {"name": "Stay put", "score": 35, "summary": "Safe today, but leaves the question open and the regret risk high."},
+                ],
             }
         )
 

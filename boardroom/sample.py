@@ -135,6 +135,12 @@ SAMPLE_MEETING = {
         ],
         "review": "At month six, compare pop-up results with your walk-away numbers before resigning.",
         "review_in_days": 180,
+        "options": [
+            {"name": "Test while employed", "score": 84, "summary": "Barista shifts and a pop-up prove the idea with your salary intact."},
+            {"name": "Take over an existing café", "score": 61, "summary": "Cheaper than building, but only after the concept is proven."},
+            {"name": "Quit and build a café now", "score": 28, "summary": "Bets your savings and a long lease on untested assumptions."},
+            {"name": "Stay in marketing", "score": 40, "summary": "Safe, but leaves a recurring dream unanswered."},
+        ],
     },
 }
 SAMPLE_MEETING["steps"] = SAMPLE_MEETING["verdict"].pop("steps")

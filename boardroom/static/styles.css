@@ -297,6 +297,18 @@ button, input, textarea { font: inherit; color: inherit; }
 .vote .pos { font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
 .vote .pos.for { color: var(--ok); } .vote .pos.against { color: var(--bad); } .vote .pos.mixed { color: var(--warn); }
 .vote .reason { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.options { margin-top: 18px; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 14px 16px; background: var(--bg); }
+.options h3 { font: 650 12px var(--sans); text-transform: uppercase; letter-spacing: .08em; color: var(--text-3); margin-bottom: 10px; }
+.options h3 span { text-transform: none; letter-spacing: 0; font-weight: 500; margin-left: 6px; }
+.options ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.opt-head { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.opt-name { font-weight: 600; }
+.opt-head .badge { font-size: 10px; padding: 2px 6px; }
+.opt-score { margin-left: auto; font-weight: 650; font-variant-numeric: tabular-nums; }
+.opt-track { height: 8px; margin: 6px 0 4px; background: var(--bg-sunk); border-radius: 0 4px 4px 0; }
+.opt-track i { display: block; height: 100%; border-radius: 0 4px 4px 0; background: var(--text-3); min-width: 2px; }
+.options .top .opt-track i { background: var(--chart); }
+.opt-sum { font-size: 13px; color: var(--text-2); }
 .verdict-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 18px; }
 .panel { background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 14px 16px; }
 .panel h3 { font: 650 12px var(--sans); text-transform: uppercase; letter-spacing: .08em; color: var(--text-3); margin-bottom: 8px; }
@@ -367,7 +379,7 @@ button, input, textarea { font: inherit; color: inherit; }
   .card, .panel, .step { break-inside: avoid; box-shadow: none; }
   .grid { grid-template-columns: 1fr 1fr; }
   .caret > p:last-child::after { content: none; }
-  .ring, .vote .avatar, .avatar { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .ring, .vote .avatar, .avatar, .opt-track i { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   .section-title { break-after: avoid; }
 }
 

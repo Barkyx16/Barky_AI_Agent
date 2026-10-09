@@ -123,6 +123,10 @@ async def run_meeting(
         data["confidence"] = max(0, min(100, int(data["confidence"])))
         data["votes"] = [v for v in data["votes"] if v["advisor"] in by_key]
         data["review_in_days"] = max(1, min(365, int(data["review_in_days"])))
+        data["options"] = sorted(
+            ({**o, "score": max(0, min(100, int(o["score"])))} for o in data.get("options", [])),
+            key=lambda o: -o["score"],
+        )[:4]
         today_utc = datetime.now(timezone.utc).date()
         review_at = (today_utc + timedelta(days=data["review_in_days"])).isoformat()
         await asyncio.to_thread(db.finish_meeting, meeting_id, data, review_at)

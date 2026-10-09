@@ -966,3 +966,21 @@ def test_ask_daily_limit_and_cost(tmp_path):
     with client.app.state.db.conn() as c:
         after = c.execute("SELECT output_tokens FROM meetings WHERE id = ?", (meeting_id,)).fetchone()[0]
     assert after == before + 2 * 500
+
+
+def test_verdict_options_are_sorted_and_clamped(tmp_path):
+    class WildOptions(DemoEngine):
+        async def verdict(self, prompt, on_usage=None):
+            v = await super().verdict(prompt)
+            v.options[0].score = 140
+            v.options[1].score = -5
+            v.options.append(v.options[0].model_copy(update={"name": "Extra", "score": 50}))
+            v.options.append(v.options[0].model_copy(update={"name": "Too many", "score": 10}))
+            return v
+
+    client = make_client(tmp_path, engine=WildOptions(delay=0))
+    signup(client)
+    evs = events(client.post("/api/meetings", json={"question": "Which option?"}))
+    opts = next(e["verdict"]["options"] for e in evs if e["type"] == "verdict")
+    assert [o["score"] for o in opts] == [100, 50, 35, 10]  # clamped, sorted, lowest dropped
+    assert len(opts) == 4

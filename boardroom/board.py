@@ -228,6 +228,9 @@ or mixed) and a short reason in their voice.
 when (e.g. "Today", "This week", "By Nov 1").
 - review: when to revisit this decision and what to look at then.
 - review_in_days: the number of days from today until that review (1-365).
+- options: the 2-4 realistic paths the board weighed (including any third path an advisor \
+raised), each with a short name (2-6 words), a fit score from 0 to 100 for how well it suits \
+this person, and a one-sentence summary. The path you recommend must have the highest score.
 """
 
 
@@ -257,6 +260,12 @@ class Vote(BaseModel):
     reason: str
 
 
+class OptionScore(BaseModel):
+    name: str
+    score: int
+    summary: str
+
+
 class PlanStep(BaseModel):
     title: str
     detail: str
@@ -273,6 +282,7 @@ class Verdict(BaseModel):
     steps: list[PlanStep]
     review: str
     review_in_days: int
+    options: list[OptionScore]
 
 
 def board_public() -> list[dict[str, str]]:

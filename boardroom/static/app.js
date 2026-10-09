@@ -992,6 +992,22 @@ function chairSection(m) {
   return "";
 }
 
+function optionsChart(options) {
+  if (!Array.isArray(options) || options.length < 2) return "";
+  const rows = options.slice().sort((a, b) => b.score - a.score);
+  return `<section class="options" aria-label="Options compared">
+    <h3>Options compared <span>fit score, 0–100</span></h3>
+    <ol>${rows.map((o, i) => {
+      const score = Math.max(0, Math.min(100, Number(o.score) || 0));
+      return `<li class="${i === 0 ? "top" : ""}">
+        <div class="opt-head"><span class="opt-name">${esc(o.name)}</span>${i === 0 ? '<span class="badge">Recommended</span>' : ""}<span class="opt-score">${score}</span></div>
+        <div class="opt-track"><i data-w="${score}"></i></div>
+        <div class="opt-sum">${esc(o.summary)}</div>
+      </li>`;
+    }).join("")}</ol>
+  </section>`;
+}
+
 function verdictCard(v, steps, readonly = false, guest = null, reviewAt = null) {
   const by = advisorsByKey(guest);
   const chair = by.chair;
@@ -1010,6 +1026,7 @@ function verdictCard(v, steps, readonly = false, guest = null, reviewAt = null) 
       const a = by[x.advisor];
       return a ? `<span class="vote" title="${esc(x.reason)}"><span class="avatar sm" data-c="${esc(a.color)}">${esc(a.initials)}</span><span class="pos ${esc(x.position)}">${esc(x.position)}</span><span class="reason">${esc(x.reason)}</span></span>` : "";
     }).join("")}</div>
+    ${optionsChart(v.options)}
     <div class="verdict-cols">
       <div class="panel first-move"><h3>Your first move · next 24 hours</h3><p>${esc(v.first_move)}</p></div>
       <div class="panel"><h3>Risks to watch</h3><ul>${v.risks.map((r) => `<li>${esc(r)}</li>`).join("")}</ul></div>
