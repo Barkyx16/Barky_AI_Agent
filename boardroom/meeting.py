@@ -12,6 +12,7 @@ from datetime import date
 from typing import Any, AsyncIterator
 
 from .board import Advisor, chair_prompt, opening_prompt, rebuttal_prompt, seats
+from .costs import Prices, add_usage
 from .db import Database
 from .engine import Engine, EngineError
 
@@ -27,6 +28,7 @@ async def _run_round(
     db: Database,
     meeting_id: int,
     results: dict[str, str],
+    usage: dict[str, int],
 ) -> AsyncIterator[dict[str, Any]]:
     queue: asyncio.Queue = asyncio.Queue()
     failures: list[EngineError] = []
@@ -41,6 +43,8 @@ async def _run_round(
                     await queue.put({"type": "delta", "advisor": advisor.key, "round": round_no, "text": payload})
                 elif kind == "status":
                     await queue.put({"type": "status", "advisor": advisor.key, "round": round_no, "text": payload})
+                elif kind == "usage":
+                    add_usage(usage, payload)
                 elif kind == "sources":
                     sources = list(payload)
                     await queue.put({"type": "sources", "advisor": advisor.key, "round": round_no, "sources": sources})
@@ -84,7 +88,10 @@ async def run_meeting(
     context: str,
     mode: str,
     guest: Advisor | None = None,
+    prices: Prices | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
+    prices = prices or Prices()
+    usage: dict[str, int] = {}
     board = seats(guest)
     by_key = {a.key: a for a in board}
     today = date.today().strftime("%A, %B %d, %Y")
@@ -93,7 +100,7 @@ async def run_meeting(
         yield {"type": "round_start", "round": 1}
         opening: dict[str, str] = {}
         prompts = {a.key: opening_prompt(question, context, today) for a in board}
-        async for event in _run_round(engine, board, 1, prompts, db, meeting_id, opening):
+        async for event in _run_round(engine, board, 1, prompts, db, meeting_id, opening, usage):
             yield event
         rounds = [dict((a.key, opening.get(a.key, "")) for a in board)]
 
@@ -103,12 +110,15 @@ async def run_meeting(
             prompts = {
                 a.key: rebuttal_prompt(a, question, context, today, rounds[0], by_key) for a in board
             }
-            async for event in _run_round(engine, board, 2, prompts, db, meeting_id, rebuttals):
+            async for event in _run_round(engine, board, 2, prompts, db, meeting_id, rebuttals, usage):
                 yield event
             rounds.append(dict((a.key, rebuttals.get(a.key, "")) for a in board))
 
         yield {"type": "chair_start"}
-        verdict = await engine.verdict(chair_prompt(question, context, today, rounds, by_key))
+        verdict = await engine.verdict(
+            chair_prompt(question, context, today, rounds, by_key),
+            on_usage=lambda u: add_usage(usage, u),
+        )
         data = verdict.model_dump()
         data["confidence"] = max(0, min(100, int(data["confidence"])))
         data["votes"] = [v for v in data["votes"] if v["advisor"] in by_key]
@@ -127,8 +137,9 @@ async def run_meeting(
         yield {"type": "error", "message": "Something went wrong during the meeting. Please try again."}
     finally:
         if not finished:
-            # The client went away mid-meeting.
+            # The server stopped mid-meeting.
             db.fail_meeting(meeting_id, status="interrupted")
+        db.record_usage(meeting_id, usage, prices.cost(usage))
 
 
 def db_meeting_steps(db: Database, meeting_id: int) -> list[dict[str, Any]]:

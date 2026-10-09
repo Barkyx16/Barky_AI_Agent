@@ -288,6 +288,7 @@ function renderShell() {
       <aside class="sidebar" aria-label="Meetings">
         <div class="brand"><img src="/static/favicon.svg" alt=""> Boardroom</div>
         <a class="btn btn-primary btn-block" href="#/new">${ICON_PLUS} New meeting</a>
+        ${state.user.is_admin ? `<a class="admin-link" href="#/admin">Owner dashboard</a>` : ""}
         <nav class="history" id="history"></nav>
         <div class="account" id="account"></div>
       </aside>
@@ -467,7 +468,12 @@ function route() {
     welcomePro();
   }
   const m = location.hash.match(/^#\/m\/(\d+)/);
-  if (m) {
+  if (location.hash === "#/admin" && state.user.is_admin) {
+    state.view = "admin";
+    state.meetingId = null;
+    renderHistory();
+    renderAdmin();
+  } else if (m) {
     state.view = "meeting";
     state.meetingId = Number(m[1]);
     renderHistory();
@@ -1047,6 +1053,111 @@ async function attach(m) {
   renderLive();
   await follow(res, live);
   return true;
+}
+
+/* ---------- owner dashboard ---------------------------------------------- */
+
+const fmtInt = (n) => Number(n || 0).toLocaleString();
+const fmtUsd = (n, digits = 2) => {
+  const v = Number(n || 0);
+  return `${v < 0 ? "−" : ""}$${Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
+};
+const fmtPct = (n) => `${(100 * (n || 0)).toFixed(1)}%`;
+const fmtDay = (iso) => new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+
+function niceMax(v) {
+  if (v <= 0) return 1;
+  const p = 10 ** Math.floor(Math.log10(v));
+  for (const m of [1, 2, 2.5, 5, 10]) if (m * p >= v) return m * p;
+  return 10 * p;
+}
+
+/* Single-series column chart: thin bars, rounded data-end, hairline grid, hover tooltip. */
+function columnChart(id, rows, key, fmt) {
+  const W = 460, H = 170, L = 40, R = 6, T = 10, B = 24;
+  const max = niceMax(Math.max(...rows.map((r) => r[key])));
+  const band = (W - L - R) / rows.length;
+  const bw = Math.min(24, band - 2);
+  const y = (v) => T + (H - T - B) * (1 - v / max);
+  const ticks = [0, max / 2, max];
+  const grid = ticks.map((t) => `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}"/>
+    <text class="tick" x="${L - 6}" y="${y(t) + 4}" text-anchor="end">${esc(fmt(t))}</text>`).join("");
+  const bars = rows.map((r, i) => {
+    const x = L + i * band + (band - bw) / 2;
+    const top = y(r[key]), base = y(0);
+    const h = base - top;
+    const rad = Math.min(4, h, bw / 2);
+    const path = h <= 0 ? "" : `<path class="bar" d="M${x},${base} V${top + rad} Q${x},${top} ${x + rad},${top} H${x + bw - rad} Q${x + bw},${top} ${x + bw},${top + rad} V${base} Z"/>`;
+    const label = i % 2 === rows.length % 2 ? "" : `<text class="tick" x="${x + bw / 2}" y="${H - 8}" text-anchor="middle">${esc(fmtDay(r.date))}</text>`;
+    return `<g class="col" data-i="${i}">${path}<rect class="hit" x="${L + i * band}" y="${T}" width="${band}" height="${H - T - B}"/>${label}</g>`;
+  }).join("");
+  return `<div class="chart" id="${id}">
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(key)} per day, last ${rows.length} days">${grid}
+      <line class="axis" x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}"/>${bars}</svg>
+    <div class="tip" hidden></div></div>`;
+}
+
+function bindChart(el, rows, key, fmt, label) {
+  const tip = el.querySelector(".tip");
+  el.querySelectorAll(".col").forEach((g) => {
+    const show = () => {
+      const r = rows[Number(g.dataset.i)];
+      tip.innerHTML = `<span>${esc(fmtDay(r.date))}</span><strong>${esc(fmt(r[key]))}</strong> ${esc(label)}`;
+      tip.hidden = false;
+      const box = el.getBoundingClientRect(), b = g.getBoundingClientRect();
+      tip.style.left = `${Math.min(Math.max(b.left - box.left + b.width / 2, 60), box.width - 60)}px`;
+      el.querySelectorAll(".col").forEach((o) => o.classList.toggle("dim", o !== g));
+    };
+    g.addEventListener("mouseenter", show);
+    g.addEventListener("click", show);
+  });
+  el.addEventListener("mouseleave", () => {
+    tip.hidden = true;
+    el.querySelectorAll(".col").forEach((o) => o.classList.remove("dim"));
+  });
+}
+
+function statTile(label, value, sub = "", hero = false) {
+  return `<div class="stat ${hero ? "hero" : ""}"><div class="label">${esc(label)}</div><div class="value">${esc(value)}</div>${sub ? `<div class="sub">${esc(sub)}</div>` : ""}</div>`;
+}
+
+async function renderAdmin() {
+  const view = document.getElementById("view");
+  delete view.dataset.layout;
+  view.innerHTML = `<div class="boot"><div class="spinner"></div></div>`;
+  let st;
+  try {
+    st = await api("/api/admin/stats");
+  } catch (err) {
+    view.innerHTML = errorBox(err.message);
+    return;
+  }
+  if (state.view !== "admin") return;
+  const margin = st.revenue.mrr_estimate_usd - st.cost.last_30d_usd;
+  view.innerHTML = `
+    <div class="composer-head"><h1>Owner dashboard</h1>
+      <p>How Boardroom is doing. Costs are estimates from API token usage${st.engine === "demo" ? " (demo mode makes no API calls, so costs read $0)" : ""}.</p></div>
+    <div class="kpis">
+      ${statTile("Estimated monthly revenue", fmtUsd(st.revenue.mrr_estimate_usd, 0), `${fmtInt(st.users.pro)} Pro × ${fmtUsd(st.revenue.pro_price_usd, 0)}`, true)}
+      ${statTile("Users", fmtInt(st.users.total), `${fmtInt(st.users.new_7d)} new this week`)}
+      ${statTile("Active this week", fmtInt(st.users.active_7d), "held at least one meeting")}
+      ${statTile("Meetings", fmtInt(st.meetings.last_7d), `last 7 days · ${fmtInt(st.meetings.today)} today`)}
+      ${statTile("Failure rate", fmtPct(st.meetings.failure_rate_7d), "last 7 days")}
+      ${statTile("API cost", fmtUsd(st.cost.last_30d_usd), "last 30 days")}
+      ${statTile("Cost per meeting", fmtUsd(st.cost.avg_per_meeting_usd, 3), "average, finished meetings")}
+      ${statTile("Revenue minus API cost", fmtUsd(margin, 0), "monthly estimate vs last 30 days")}
+      ${statTile("Shared verdicts", fmtInt(st.meetings.shared), "public links, all time")}
+    </div>
+    <div class="charts">
+      <section class="card chart-card"><h3>Meetings per day</h3><p class="chart-sub">Last 14 days</p>${columnChart("ch-meetings", st.daily, "meetings", fmtInt)}</section>
+      <section class="card chart-card"><h3>API cost per day</h3><p class="chart-sub">Last 14 days, estimated</p>${columnChart("ch-cost", st.daily, "cost_usd", (v) => fmtUsd(v, v > 0 && v < 10 ? 2 : 0))}</section>
+    </div>
+    <details class="table-view"><summary>Show as table</summary>
+      <table><thead><tr><th>Day</th><th>Sign-ups</th><th>Meetings</th><th>API cost</th></tr></thead>
+      <tbody>${st.daily.slice().reverse().map((d) => `<tr><td>${esc(fmtDay(d.date))}</td><td>${fmtInt(d.signups)}</td><td>${fmtInt(d.meetings)}</td><td>${fmtUsd(d.cost_usd, 3)}</td></tr>`).join("")}</tbody></table>
+    </details>`;
+  bindChart(view.querySelector("#ch-meetings"), st.daily, "meetings", fmtInt, "meetings");
+  bindChart(view.querySelector("#ch-cost"), st.daily, "cost_usd", (v) => fmtUsd(v, 3), "API cost");
 }
 
 /* ---------- public shared view ------------------------------------------ */

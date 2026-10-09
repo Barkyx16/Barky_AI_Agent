@@ -49,6 +49,8 @@ class Settings:
     smtp_username: str = ""
     smtp_password: str = ""
     smtp_from: str = ""
+    admin_emails: tuple[str, ...] = ()
+    pro_price_usd: float = 12.0
 
     @property
     def billing_enabled(self) -> bool:
@@ -78,4 +80,8 @@ class Settings:
             smtp_username=os.environ.get("SMTP_USERNAME", ""),
             smtp_password=os.environ.get("SMTP_PASSWORD", ""),
             smtp_from=os.environ.get("SMTP_FROM", "") or os.environ.get("SMTP_USERNAME", ""),
+            admin_emails=tuple(
+                e.strip().lower() for e in os.environ.get("BOARDROOM_ADMIN_EMAILS", "").split(",") if e.strip()
+            ),
+            pro_price_usd=float(os.environ.get("BOARDROOM_PRO_PRICE_USD", "12")),
         )

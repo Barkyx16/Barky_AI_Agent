@@ -24,6 +24,7 @@ from . import auth
 from .billing import Billing, BillingError, verify_signature
 from .board import GUEST_COLOR, board_public, make_guest
 from .config import Settings
+from .costs import Prices
 from .db import Database
 from .engine import Engine, make_engine
 from .hub import MeetingHub
@@ -102,6 +103,7 @@ def create_app(
     demo = engine.name == "demo"
 
     hub = MeetingHub()
+    prices = Prices.from_env()
     # Meetings left "running" by a previous process can't resume.
     db.interrupt_running()
 
@@ -176,6 +178,7 @@ def create_app(
             "name": user["name"],
             "usage": usage(user),
             "can_manage_billing": billing is not None and bool(user["stripe_customer_id"]),
+            "is_admin": user["email"] in settings.admin_emails,
         }
 
     # ---- public -----------------------------------------------------------
@@ -284,6 +287,18 @@ def create_app(
         db.delete_user(user["id"])
         response.delete_cookie(COOKIE)
         return {"ok": True}
+
+    @app.get("/api/admin/stats")
+    def admin_stats(user=Depends(current_user)):
+        if user["email"] not in settings.admin_emails:
+            raise HTTPException(status_code=403, detail="Admins only.")
+        stats = db.stats()
+        stats["revenue"] = {
+            "mrr_estimate_usd": round(stats["users"]["pro"] * settings.pro_price_usd, 2),
+            "pro_price_usd": settings.pro_price_usd,
+        }
+        stats["engine"] = engine.name
+        return stats
 
     @app.get("/api/meetings")
     def meetings(user=Depends(current_user)):
@@ -423,7 +438,9 @@ def create_app(
 
         async def events():
             yield {"type": "meeting", "id": meeting_id, "mode": body.mode, "guest": guest_public(guest_advisor)}
-            async for event in run_meeting(engine, db, meeting_id, question, context, body.mode, guest_advisor):
+            async for event in run_meeting(
+                engine, db, meeting_id, question, context, body.mode, guest_advisor, prices
+            ):
                 yield event
 
         run = hub.start(meeting_id, user["id"], events())

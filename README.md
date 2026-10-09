@@ -29,6 +29,7 @@ Boardroom gives anyone a private board of AI advisors. You bring a decision ("Sh
 - **Demo mode.** Runs with scripted advisors when no API key is set, so anyone can try the full experience.
 - **Polished UI.** Responsive from phone to desktop, light and dark themes, keyboard shortcuts (⌘/Ctrl+Enter), accessible markup, and no build step.
 - **Graceful failures.** If one advisor hits an error, they sit the round out and the meeting continues.
+- **Owner dashboard.** Revenue estimate, users, active users, meetings, failure rate, shared verdicts, and the API cost of every meeting (tokens and web searches turned into dollars), with daily charts. Visible only to admin emails.
 - **Duty of care.** Every advisor follows safety rules for crisis situations and high-stakes medical, legal, or financial topics.
 
 ## Run it
@@ -67,6 +68,10 @@ docker run -p 8000:8000 -e ANTHROPIC_API_KEY=sk-ant-... -v boardroom-data:/data 
 | `SMTP_HOST` / `SMTP_PORT` | — / `587` | Outgoing mail server. Enables "Forgot password?" (port 465 uses SSL, others use STARTTLS). |
 | `SMTP_USERNAME` / `SMTP_PASSWORD` | — | SMTP login. |
 | `SMTP_FROM` | `SMTP_USERNAME` | The "From" address on emails. |
+| `BOARDROOM_ADMIN_EMAILS` | — | Comma-separated emails that can open the owner dashboard. |
+| `BOARDROOM_PRO_PRICE_USD` | `12` | Pro price as a number, for the revenue estimate. |
+| `BOARDROOM_PRICE_INPUT` / `_OUTPUT` / `_CACHE_WRITE` / `_CACHE_READ` | `4` / `20` / `5` / `0.20` | API prices in USD per million tokens, for cost tracking (Claude Opus 5.5 list prices). |
+| `BOARDROOM_PRICE_SEARCH` | `0.01` | Cost per web search. |
 | `HOST` / `PORT` | `127.0.0.1` / `8000` | Where the server listens. |
 | `FORWARDED_ALLOW_IPS` | `127.0.0.1` | Behind a reverse proxy or load balancer, set this to the proxy's IP (or `*`) so rate limits see real client IPs. |
 
@@ -98,6 +103,7 @@ browser ──POST /api/meetings──▶ FastAPI ──▶ meeting.run_meeting(
 - `boardroom/engine.py`: the Claude engine (streaming, adaptive thinking, web search, server-side refusal fallbacks) and the demo engine.
 - `boardroom/meeting.py`: runs the rounds and merges advisor streams into one event feed.
 - `boardroom/hub.py`: runs each meeting as a background task with a replayable event log, so viewers can attach and detach freely.
+- `boardroom/costs.py`: turns reported token usage into an estimated dollar cost per meeting.
 - `boardroom/mailer.py`: SMTP email for password resets.
 - `boardroom/billing.py`: Stripe Checkout, customer portal, and webhook signature checks.
 - `boardroom/app.py`: API, auth (with login throttling), quotas, share links, and security headers.

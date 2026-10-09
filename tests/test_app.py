@@ -34,7 +34,7 @@ class PaidEngine(DemoEngine):
 class BrokenEngine(DemoEngine):
     name = "claude"
 
-    async def verdict(self, prompt):
+    async def verdict(self, prompt, **kwargs):
         raise EngineError("The board is at capacity right now.")
 
 
@@ -622,3 +622,54 @@ def test_reset_disabled_without_smtp(tmp_path):
     client = make_client(tmp_path)
     assert client.get("/api/config").json()["password_reset"] is False
     assert client.post("/api/password/forgot", json={"email": "a@example.com"}).status_code == 404
+
+
+# ---- usage & cost tracking -------------------------------------------------
+
+
+class MeteredEngine(DemoEngine):
+    async def take(self, advisor, prompt):
+        async for event in super().take(advisor, prompt):
+            yield event
+        searches = 1 if advisor.key == "analyst" else 0
+        yield ("usage", {"input_tokens": 1000, "output_tokens": 500, "web_searches": searches})
+
+    async def verdict(self, prompt, on_usage=None):
+        if on_usage:
+            on_usage({"input_tokens": 3000, "output_tokens": 1000, "cache_read_tokens": 10000})
+        return await super().verdict(prompt)
+
+
+def test_usage_and_cost_are_recorded(tmp_path):
+    from boardroom.costs import Prices
+
+    client = make_client(tmp_path, engine=MeteredEngine(delay=0))
+    signup(client)
+    meeting_id = events(client.post("/api/meetings", json={"question": "What does this cost?"}))[0]["id"]
+    with client.app.state.db.conn() as c:
+        row = dict(c.execute("SELECT input_tokens, output_tokens, cache_read_tokens, web_searches, cost_usd FROM meetings WHERE id = ?", (meeting_id,)).fetchone())
+    assert row["input_tokens"] == 4 * 1000 + 3000
+    assert row["output_tokens"] == 4 * 500 + 1000
+    assert row["cache_read_tokens"] == 10000 and row["web_searches"] == 1
+    expected = Prices().cost({"input_tokens": 7000, "output_tokens": 3000, "cache_read_tokens": 10000, "web_searches": 1})
+    assert row["cost_usd"] == pytest.approx(expected)
+    assert expected == pytest.approx(7000 * 4e-6 + 3000 * 20e-6 + 10000 * 0.2e-6 + 0.01)
+
+
+def test_admin_stats_are_admin_only(tmp_path):
+    client = make_client(tmp_path, engine=MeteredEngine(delay=0), admin_emails=("boss@example.com",), pro_price_usd=15.0)
+    signup(client)  # ada, not an admin
+    events(client.post("/api/meetings", json={"question": "First question"}))
+    assert client.get("/api/me").json()["is_admin"] is False
+    assert client.get("/api/admin/stats").status_code == 403
+    client.app.state.db.set_plan("ada@example.com", "pro")
+    client.post("/api/logout")
+    signup(client, email="boss@example.com")
+    assert client.get("/api/me").json()["is_admin"] is True
+    stats = client.get("/api/admin/stats").json()
+    assert stats["users"] == {"total": 2, "pro": 1, "new_7d": 2, "active_7d": 1}
+    assert stats["meetings"]["total"] == 1 and stats["meetings"]["today"] == 1
+    assert stats["revenue"]["mrr_estimate_usd"] == 15.0
+    assert stats["cost"]["avg_per_meeting_usd"] > 0
+    assert len(stats["daily"]) == 14
+    assert stats["daily"][-1]["meetings"] == 1 and stats["daily"][-1]["signups"] == 2

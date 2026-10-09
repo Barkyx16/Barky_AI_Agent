@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-from typing import AsyncIterator, Protocol
+from typing import AsyncIterator, Callable, Protocol
 
 import anthropic
 
@@ -18,6 +18,7 @@ FALLBACK_BETA = "server-side-fallback-2026-07-01"
 #   ("text", str)            - streamed words
 #   ("status", str)          - what the advisor is doing (e.g. searching the web)
 #   ("sources", list[dict])  - web pages the advisor consulted ({"title", "url"})
+#   ("usage", dict)          - tokens and searches billed for one API call (see _usage)
 Event = tuple[str, object]
 
 
@@ -30,7 +31,7 @@ class Engine(Protocol):
 
     def take(self, advisor: Advisor, prompt: str) -> AsyncIterator[Event]: ...
 
-    async def verdict(self, prompt: str) -> Verdict: ...
+    async def verdict(self, prompt: str, on_usage: Callable[[dict], None] | None = None) -> Verdict: ...
 
 
 class ClaudeEngine:
@@ -74,6 +75,7 @@ class ClaudeEngine:
                     message = await stream.get_final_message()
             except anthropic.APIError as exc:
                 raise EngineError(_friendly(exc)) from exc
+            yield ("usage", _usage(message))
 
             for block in message.content:
                 if block.type == "web_search_tool_result" and isinstance(block.content, list):
@@ -91,7 +93,7 @@ class ClaudeEngine:
         if sources:
             yield ("sources", [{"url": u, "title": t} for u, t in sources.items()])
 
-    async def verdict(self, prompt: str) -> Verdict:
+    async def verdict(self, prompt: str, on_usage: Callable[[dict], None] | None = None) -> Verdict:
         try:
             response = await self.client.beta.messages.parse(
                 model=self.model,
@@ -106,11 +108,27 @@ class ClaudeEngine:
             )
         except anthropic.APIError as exc:
             raise EngineError(_friendly(exc)) from exc
+        if on_usage:
+            on_usage(_usage(response))
         if response.stop_reason == "refusal" or response.parsed_output is None:
             raise EngineError(
                 "The Chair couldn't reach a verdict on this one. Try rephrasing the question."
             )
         return response.parsed_output
+
+
+def _usage(message) -> dict:
+    u = getattr(message, "usage", None)
+    if u is None:
+        return {}
+    server = getattr(u, "server_tool_use", None)
+    return {
+        "input_tokens": getattr(u, "input_tokens", 0) or 0,
+        "output_tokens": getattr(u, "output_tokens", 0) or 0,
+        "cache_write_tokens": getattr(u, "cache_creation_input_tokens", 0) or 0,
+        "cache_read_tokens": getattr(u, "cache_read_input_tokens", 0) or 0,
+        "web_searches": (getattr(server, "web_search_requests", 0) or 0) if server else 0,
+    }
 
 
 def _friendly(exc: anthropic.APIError) -> str:
@@ -209,7 +227,7 @@ class DemoEngine:
             yield ("text", word if i == 0 else " " + word)
             await asyncio.sleep(self.delay)
 
-    async def verdict(self, prompt: str) -> Verdict:
+    async def verdict(self, prompt: str, on_usage: Callable[[dict], None] | None = None) -> Verdict:
         await asyncio.sleep(self.delay * 30)
         t = _topic(prompt)
         return Verdict.model_validate(

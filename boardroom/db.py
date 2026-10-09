@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -80,6 +80,12 @@ class Database:
                 c.execute("ALTER TABLE meetings ADD COLUMN share_token TEXT")
             if "guest" not in cols:
                 c.execute("ALTER TABLE meetings ADD COLUMN guest TEXT")
+            for col, kind in (
+                ("input_tokens", "INTEGER"), ("output_tokens", "INTEGER"), ("cache_write_tokens", "INTEGER"),
+                ("cache_read_tokens", "INTEGER"), ("web_searches", "INTEGER"), ("cost_usd", "REAL"),
+            ):
+                if col not in cols:
+                    c.execute(f"ALTER TABLE meetings ADD COLUMN {col} {kind} NOT NULL DEFAULT 0")
             c.execute(
                 "CREATE UNIQUE INDEX IF NOT EXISTS meetings_share ON meetings(share_token) "
                 "WHERE share_token IS NOT NULL"
@@ -240,6 +246,18 @@ class Database:
                     (meeting_id, i, step["title"], step.get("detail", ""), step.get("when", "")),
                 )
 
+    def record_usage(self, meeting_id: int, usage: dict, cost_usd: float) -> None:
+        with self.conn() as c:
+            c.execute(
+                "UPDATE meetings SET input_tokens = ?, output_tokens = ?, cache_write_tokens = ?, "
+                "cache_read_tokens = ?, web_searches = ?, cost_usd = ? WHERE id = ?",
+                (
+                    usage.get("input_tokens", 0), usage.get("output_tokens", 0),
+                    usage.get("cache_write_tokens", 0), usage.get("cache_read_tokens", 0),
+                    usage.get("web_searches", 0), round(cost_usd, 6), meeting_id,
+                ),
+            )
+
     def fail_meeting(self, meeting_id: int, status: str = "failed") -> None:
         with self.conn() as c:
             c.execute(
@@ -375,4 +393,65 @@ class Database:
             "verdict": meeting["verdict"],
             "takes": meeting["takes"],
             "steps": [{**s, "id": 0, "done": False} for s in meeting["steps"]],
+        }
+
+    # ---- owner dashboard ------------------------------------------------------
+
+    def stats(self, days: int = 14) -> dict[str, Any]:
+        today = datetime.now(timezone.utc).date()
+        start = (today - timedelta(days=days - 1)).isoformat()
+        d7 = (today - timedelta(days=6)).isoformat()
+        d30 = (today - timedelta(days=29)).isoformat()
+        with self.conn() as c:
+            one = lambda sql, *a: c.execute(sql, a).fetchone()[0] or 0  # noqa: E731
+            users = one("SELECT COUNT(*) FROM users")
+            pro = one("SELECT COUNT(*) FROM users WHERE plan = 'pro'")
+            new_7d = one("SELECT COUNT(*) FROM users WHERE created_at >= ?", d7)
+            active_7d = one("SELECT COUNT(DISTINCT user_id) FROM meetings WHERE created_at >= ?", d7)
+            total = one("SELECT COUNT(*) FROM meetings")
+            m_today = one("SELECT COUNT(*) FROM meetings WHERE created_at >= ?", today.isoformat())
+            m_7d = one("SELECT COUNT(*) FROM meetings WHERE created_at >= ?", d7)
+            failed_7d = one(
+                "SELECT COUNT(*) FROM meetings WHERE created_at >= ? AND status IN ('failed', 'interrupted')", d7
+            )
+            shared = one("SELECT COUNT(*) FROM meetings WHERE share_token IS NOT NULL")
+            cost_30d = one("SELECT SUM(cost_usd) FROM meetings WHERE created_at >= ?", d30)
+            cost_today = one("SELECT SUM(cost_usd) FROM meetings WHERE created_at >= ?", today.isoformat())
+            avg_cost = one(
+                "SELECT AVG(cost_usd) FROM meetings WHERE created_at >= ? AND status = 'done' AND cost_usd > 0", d30
+            )
+            meetings_by_day = dict(c.execute(
+                "SELECT substr(created_at, 1, 10) AS d, COUNT(*) FROM meetings WHERE created_at >= ? GROUP BY d",
+                (start,),
+            ).fetchall())
+            cost_by_day = dict(c.execute(
+                "SELECT substr(created_at, 1, 10) AS d, SUM(cost_usd) FROM meetings WHERE created_at >= ? GROUP BY d",
+                (start,),
+            ).fetchall())
+            signups_by_day = dict(c.execute(
+                "SELECT substr(created_at, 1, 10) AS d, COUNT(*) FROM users WHERE created_at >= ? GROUP BY d",
+                (start,),
+            ).fetchall())
+        daily = []
+        for i in range(days):
+            d = (today - timedelta(days=days - 1 - i)).isoformat()
+            daily.append({
+                "date": d,
+                "meetings": meetings_by_day.get(d, 0),
+                "signups": signups_by_day.get(d, 0),
+                "cost_usd": round(cost_by_day.get(d, 0) or 0, 4),
+            })
+        return {
+            "users": {"total": users, "pro": pro, "new_7d": new_7d, "active_7d": active_7d},
+            "meetings": {
+                "total": total, "today": m_today, "last_7d": m_7d,
+                "failure_rate_7d": round(failed_7d / m_7d, 4) if m_7d else 0.0,
+                "shared": shared,
+            },
+            "cost": {
+                "today_usd": round(cost_today, 4),
+                "last_30d_usd": round(cost_30d, 4),
+                "avg_per_meeting_usd": round(avg_cost, 4),
+            },
+            "daily": daily,
         }
