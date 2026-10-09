@@ -273,7 +273,9 @@ function renderAccount() {
       <span class="badge">${u.plan === "pro" ? "Pro" : state.config.demo ? "Demo" : "Free"}</span></div>
     ${limited ? `<div class="usage">${u.used_today} of ${u.daily_limit} meetings today<div class="usage-bar"><i data-w="${pct}"></i></div></div>` : ""}
     <div class="account-row">
-      ${u.plan !== "pro" && !state.config.demo ? `<button class="btn btn-sm" id="upgrade">Upgrade to Pro</button>` : "<span></span>"}
+      ${u.plan !== "pro" && !state.config.demo
+        ? `<button class="btn btn-sm" id="upgrade">Upgrade to Pro</button>`
+        : state.user.can_manage_billing ? `<button class="btn btn-ghost btn-sm" id="billing">Manage billing</button>` : "<span></span>"}
       <span><button class="btn btn-ghost btn-sm" id="theme" aria-label="Toggle theme">${ICON_THEME}</button>
       <button class="btn btn-ghost btn-sm" id="logout">Sign out</button></span>
     </div>`;
@@ -286,6 +288,10 @@ function renderAccount() {
     renderLanding("login");
   });
   document.getElementById("upgrade")?.addEventListener("click", showUpgrade);
+  document.getElementById("billing")?.addEventListener("click", async (e) => {
+    e.currentTarget.disabled = true;
+    try { location.href = (await api("/api/billing/portal", { method: "POST" })).url; } catch (err) { toast(err.message); e.currentTarget.disabled = false; }
+  });
 }
 
 function showUpgrade() {
@@ -296,14 +302,29 @@ function showUpgrade() {
       <span class="badge">Boardroom Pro</span>
       <h2 id="up-title">A board that's always in session</h2>
       <ul><li>Unlimited meetings every day</li><li>Deep debates: advisors rebut each other before the Chair rules</li><li>Priority access during busy hours</li></ul>
-      <p class="fine">Pro upgrades are handled by the site owner. Contact them to upgrade your account.</p>
-      <div class="actions"><button class="btn btn-primary" id="close-up">Got it</button></div>
+      ${state.config.billing
+        ? `<p class="price"><strong>${esc(state.config.pro_price)}</strong> · cancel anytime</p>
+           <p class="error-text" id="up-error"></p>
+           <div class="actions"><button class="btn btn-ghost" id="close-up">Not now</button><button class="btn btn-primary" id="go-pro">Upgrade to Pro</button></div>`
+        : `<p class="fine">Pro upgrades are handled by the site owner. Contact them to upgrade your account.</p>
+           <div class="actions"><button class="btn btn-primary" id="close-up">Got it</button></div>`}
     </div>`;
   document.body.appendChild(back);
   const close = () => back.remove();
   back.addEventListener("click", (e) => { if (e.target === back) close(); });
   back.querySelector("#close-up").addEventListener("click", close);
-  back.querySelector("#close-up").focus();
+  const go = back.querySelector("#go-pro");
+  go?.addEventListener("click", async () => {
+    go.disabled = true;
+    try {
+      const { url } = await api("/api/billing/checkout", { method: "POST" });
+      location.href = url;
+    } catch (err) {
+      back.querySelector("#up-error").textContent = err.message;
+      go.disabled = false;
+    }
+  });
+  (go || back.querySelector("#close-up")).focus();
 }
 
 async function refreshSidebar() {
@@ -319,6 +340,10 @@ async function refreshSidebar() {
 function route() {
   if (!state.user) return;
   closeNav();
+  if (location.hash === "#/billing/success") {
+    history.replaceState(null, "", "#/new");
+    welcomePro();
+  }
   const m = location.hash.match(/^#\/m\/(\d+)/);
   if (m) {
     state.view = "meeting";
@@ -339,6 +364,21 @@ window.addEventListener("hashchange", () => {
   if (/^#\/s\//.test(location.hash) || document.querySelector(".public")) { location.reload(); return; }
   route();
 });
+
+/* Stripe's webhook can land a moment after the redirect, so poll briefly. */
+async function welcomePro() {
+  toast("Payment received. Activating Pro…");
+  for (let i = 0; i < 10; i++) {
+    await refreshSidebar();
+    if (state.user?.usage.plan === "pro") {
+      toast("Welcome to Boardroom Pro");
+      if (state.view === "new") renderComposer();
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+  toast("Pro will activate as soon as your payment is confirmed.");
+}
 
 /* ---------- composer ----------------------------------------------------- */
 

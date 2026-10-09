@@ -53,11 +53,22 @@ docker run -p 8000:8000 -e ANTHROPIC_API_KEY=sk-ant-... -v boardroom-data:/data 
 | `BOARDROOM_DB_PATH` | `data/boardroom.db` | SQLite database location. |
 | `BOARDROOM_SECURE_COOKIES` | `0` | Set to `1` when serving over HTTPS. |
 | `BOARDROOM_DEMO` | `0` | Force demo mode even if a key is set. |
+| `STRIPE_SECRET_KEY` | — | Enables Pro subscriptions through Stripe Checkout. |
+| `STRIPE_PRICE_ID` | — | The recurring Stripe Price for Pro. |
+| `STRIPE_WEBHOOK_SECRET` | — | Signing secret for `/api/billing/webhook`. |
+| `BOARDROOM_PUBLIC_URL` | request URL | Your site's public URL, used for Stripe redirects. |
+| `BOARDROOM_PRO_PRICE_LABEL` | `$12/month` | Price text shown in the upgrade dialog. |
 | `HOST` / `PORT` | `127.0.0.1` / `8000` | Where the server listens. |
 
-### Managing plans
+### Getting paid
 
-Payments aren't wired up yet. Upgrade a customer manually after they pay:
+1. In Stripe, create a product with a recurring price and copy its `price_...` ID.
+2. Add a webhook endpoint at `https://your-domain/api/billing/webhook` for the events `checkout.session.completed`, `customer.subscription.updated` and `customer.subscription.deleted`. Copy its signing secret.
+3. Set `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, `STRIPE_WEBHOOK_SECRET` and `BOARDROOM_PUBLIC_URL`, then restart.
+
+Users then upgrade from inside the app. Their account switches to Pro when Stripe confirms payment, and back to Free if the subscription ends. Pro users get a **Manage billing** link to Stripe's customer portal.
+
+You can also change plans manually (for comps or support):
 
 ```bash
 python -m boardroom set-plan customer@example.com pro
@@ -76,6 +87,7 @@ browser ──POST /api/meetings──▶ FastAPI ──▶ meeting.run_meeting(
 - `boardroom/board.py`: advisor personas, prompts, and the verdict schema.
 - `boardroom/engine.py`: the Claude engine (streaming, adaptive thinking, web search, server-side refusal fallbacks) and the demo engine.
 - `boardroom/meeting.py`: runs the rounds and merges advisor streams into one event feed.
+- `boardroom/billing.py`: Stripe Checkout, customer portal, and webhook signature checks.
 - `boardroom/app.py`: API, auth (with login throttling), quotas, share links, and security headers.
 - `boardroom/static/`: the single-page front end, in plain HTML, CSS, and JS.
 
@@ -88,7 +100,6 @@ python -m pytest
 
 ## Roadmap to revenue
 
-1. Stripe Checkout and a billing webhook that calls `set_plan`.
-2. Password reset and email verification.
-3. Reminder emails for plan steps and the review date.
-4. Saved custom boards: reusable guest lineups per user.
+1. Password reset and email verification.
+2. Reminder emails for plan steps and the review date.
+3. Saved custom boards: reusable guest lineups per user.

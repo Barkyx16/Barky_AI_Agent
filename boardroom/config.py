@@ -39,6 +39,15 @@ class Settings:
     secure_cookies: bool
     demo_mode: bool
     demo_delay: float
+    stripe_secret_key: str = ""
+    stripe_price_id: str = ""
+    stripe_webhook_secret: str = ""
+    public_url: str = ""
+    pro_price_label: str = "$12/month"
+
+    @property
+    def billing_enabled(self) -> bool:
+        return bool(self.stripe_secret_key and self.stripe_price_id)
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -54,4 +63,9 @@ class Settings:
             secure_cookies=_flag("BOARDROOM_SECURE_COOKIES", False),
             demo_mode=_flag("BOARDROOM_DEMO", False) or not has_credentials,
             demo_delay=float(os.environ.get("BOARDROOM_DEMO_DELAY", "0.025")),
+            stripe_secret_key=os.environ.get("STRIPE_SECRET_KEY", ""),
+            stripe_price_id=os.environ.get("STRIPE_PRICE_ID", ""),
+            stripe_webhook_secret=os.environ.get("STRIPE_WEBHOOK_SECRET", ""),
+            public_url=os.environ.get("BOARDROOM_PUBLIC_URL", "").rstrip("/"),
+            pro_price_label=os.environ.get("BOARDROOM_PRO_PRICE_LABEL", "$12/month"),
         )

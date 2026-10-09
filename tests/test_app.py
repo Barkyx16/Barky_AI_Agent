@@ -344,3 +344,90 @@ def test_guest_validation(tmp_path):
     client = make_client(tmp_path)
     signup(client)
     assert client.post("/api/meetings", json={"question": "Valid?", "guest": {"name": "X"}}).status_code == 422
+
+
+# ---- billing --------------------------------------------------------------
+
+import hashlib
+import hmac
+import time as _time
+
+from boardroom.billing import Billing, verify_signature
+
+
+def _signed(payload: dict, secret: str, ts: int | None = None):
+    body = json.dumps(payload).encode()
+    ts = ts or int(_time.time())
+    sig = hmac.new(secret.encode(), f"{ts}.".encode() + body, hashlib.sha256).hexdigest()
+    return body, f"t={ts},v1={sig}"
+
+
+def billing_client(tmp_path):
+    calls = []
+
+    def fake_post(key, path, params):
+        calls.append((path, params))
+        return {"url": f"https://stripe.test{path}"}
+
+    billing = Billing("sk_test", "price_123", "whsec_test", post=fake_post)
+    app = create_app(
+        settings(tmp_path, demo_mode=False, public_url="https://boardroom.app"),
+        engine=PaidEngine(delay=0),
+        billing=billing,
+    )
+    return TestClient(app), calls
+
+
+def test_signature_verification():
+    body, header = _signed({"a": 1}, "whsec_x")
+    assert verify_signature(body, header, "whsec_x")
+    assert not verify_signature(body, header, "whsec_other")
+    assert not verify_signature(body + b" ", header, "whsec_x")
+    old_body, old_header = _signed({"a": 1}, "whsec_x", ts=int(_time.time()) - 3600)
+    assert not verify_signature(old_body, old_header, "whsec_x")
+    assert not verify_signature(body, "garbage", "whsec_x")
+
+
+def test_checkout_and_subscription_lifecycle(tmp_path):
+    client, calls = billing_client(tmp_path)
+    assert client.get("/api/config").json()["billing"] is True
+    signup(client)
+    me = client.get("/api/me").json()
+    assert me["usage"]["plan"] == "free" and me["can_manage_billing"] is False
+
+    r = client.post("/api/billing/checkout")
+    assert r.json()["url"] == "https://stripe.test/checkout/sessions"
+    path, params = calls[-1]
+    assert params["line_items[0][price]"] == "price_123"
+    assert params["customer_email"] == "ada@example.com"
+    assert params["success_url"] == "https://boardroom.app/#/billing/success"
+    user_id = params["client_reference_id"]
+
+    # Forged webhook is rejected.
+    body, _ = _signed({"type": "checkout.session.completed"}, "wrong")
+    bad = client.post("/api/billing/webhook", content=body, headers={"stripe-signature": "t=1,v1=00"})
+    assert bad.status_code == 400
+
+    body, header = _signed(
+        {"type": "checkout.session.completed", "data": {"object": {"client_reference_id": user_id, "customer": "cus_1"}}},
+        "whsec_test",
+    )
+    assert client.post("/api/billing/webhook", content=body, headers={"stripe-signature": header}).status_code == 200
+    me = client.get("/api/me").json()
+    assert me["usage"]["plan"] == "pro" and me["can_manage_billing"] is True
+    assert client.post("/api/billing/checkout").status_code == 409
+    assert client.post("/api/billing/portal").json()["url"] == "https://stripe.test/billing_portal/sessions"
+
+    body, header = _signed(
+        {"type": "customer.subscription.deleted", "data": {"object": {"customer": "cus_1", "status": "canceled"}}},
+        "whsec_test",
+    )
+    client.post("/api/billing/webhook", content=body, headers={"stripe-signature": header})
+    assert client.get("/api/me").json()["usage"]["plan"] == "free"
+
+
+def test_billing_disabled_without_keys(tmp_path):
+    client = make_client(tmp_path)
+    signup(client)
+    assert client.get("/api/config").json()["billing"] is False
+    assert client.post("/api/billing/checkout").status_code == 404

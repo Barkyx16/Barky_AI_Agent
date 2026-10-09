@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import auth
+from .billing import Billing, BillingError, verify_signature
 from .board import GUEST_COLOR, board_public, make_guest
 from .config import Settings
 from .db import Database
@@ -56,8 +57,12 @@ class StepIn(BaseModel):
     done: bool
 
 
-def create_app(settings: Settings | None = None, engine: Engine | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None, engine: Engine | None = None, billing: Billing | None = None
+) -> FastAPI:
     settings = settings or Settings.from_env()
+    if billing is None and settings.billing_enabled:
+        billing = Billing(settings.stripe_secret_key, settings.stripe_price_id, settings.stripe_webhook_secret)
     db = Database(settings.db_path)
     engine = engine or make_engine(settings)
     demo = engine.name == "demo"
@@ -122,13 +127,24 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         }
 
     def user_out(user: sqlite3.Row) -> dict:
-        return {"email": user["email"], "name": user["name"], "usage": usage(user)}
+        return {
+            "email": user["email"],
+            "name": user["name"],
+            "usage": usage(user),
+            "can_manage_billing": billing is not None and bool(user["stripe_customer_id"]),
+        }
 
     # ---- public -----------------------------------------------------------
 
     @app.get("/api/config")
     def config():
-        return {"demo": demo, "board": board_public(), "free_daily_limit": settings.free_daily_limit}
+        return {
+            "demo": demo,
+            "board": board_public(),
+            "free_daily_limit": settings.free_daily_limit,
+            "billing": billing is not None,
+            "pro_price": settings.pro_price_label,
+        }
 
     @app.post("/api/signup")
     def signup(body: SignupIn, response: Response):
@@ -209,6 +225,61 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         if found is None:
             raise HTTPException(status_code=404, detail="This link is no longer shared.")
         return with_guest_card(found)
+
+    # ---- billing ----------------------------------------------------------
+
+    def base_url(request: Request) -> str:
+        return settings.public_url or str(request.base_url).rstrip("/")
+
+    def require_billing() -> Billing:
+        if billing is None:
+            raise HTTPException(status_code=404, detail="Billing isn't set up on this server.")
+        return billing
+
+    @app.post("/api/billing/checkout")
+    def checkout(request: Request, user=Depends(current_user)):
+        b = require_billing()
+        if user["plan"] == "pro":
+            raise HTTPException(status_code=409, detail="You're already on Pro.")
+        try:
+            url = b.checkout_url(user["id"], user["email"], user["stripe_customer_id"], base_url(request))
+        except BillingError as exc:
+            raise HTTPException(status_code=502, detail=f"Payment setup failed: {exc}")
+        return {"url": url}
+
+    @app.post("/api/billing/portal")
+    def portal(request: Request, user=Depends(current_user)):
+        b = require_billing()
+        if not user["stripe_customer_id"]:
+            raise HTTPException(status_code=404, detail="No billing account yet.")
+        try:
+            return {"url": b.portal_url(user["stripe_customer_id"], base_url(request))}
+        except BillingError as exc:
+            raise HTTPException(status_code=502, detail=f"Couldn't open billing: {exc}")
+
+    @app.post("/api/billing/webhook")
+    async def webhook(request: Request):
+        b = require_billing()
+        payload = await request.body()
+        signature = request.headers.get("stripe-signature", "")
+        if not b.webhook_secret or not verify_signature(payload, signature, b.webhook_secret):
+            raise HTTPException(status_code=400, detail="Invalid signature.")
+        event = json.loads(payload)
+        obj = event.get("data", {}).get("object", {})
+        kind = event.get("type")
+        if kind == "checkout.session.completed" and obj.get("client_reference_id"):
+            try:
+                user_id = int(obj["client_reference_id"])
+            except ValueError:
+                return {"ok": True}
+            db.set_plan_by_id(user_id, "pro", obj.get("customer"))
+        elif kind in ("customer.subscription.updated", "customer.subscription.deleted"):
+            active = kind == "customer.subscription.updated" and obj.get("status") in (
+                "active", "trialing", "past_due"
+            )
+            if obj.get("customer"):
+                db.set_plan_by_customer(obj["customer"], "pro" if active else "free")
+        return {"ok": True}
 
     @app.patch("/api/steps/{step_id}")
     def update_step(step_id: int, body: StepIn, user=Depends(current_user)):

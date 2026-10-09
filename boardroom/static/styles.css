@@ -337,7 +337,10 @@ button, input, textarea { font: inherit; color: inherit; }
 .modal-back { position: fixed; inset: 0; background: rgba(0, 0, 0, .45); display: grid; place-items: center; z-index: 40; padding: 16px; }
 .modal { width: 100%; max-width: 440px; background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow); }
 .modal h2 { font-size: 24px; margin-bottom: 8px; }
+.modal .badge { margin-bottom: 12px; }
 .modal ul { padding-left: 1.2em; color: var(--text-2); }
+.modal .price { margin: 14px 0 0; color: var(--text-2); }
+.modal .price strong { font: 600 22px var(--serif); color: var(--text); }
 .modal .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
 
 /* Responsive ------------------------------------------------------------- */

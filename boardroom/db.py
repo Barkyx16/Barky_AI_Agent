@@ -67,6 +67,9 @@ class Database:
             Path(path).parent.mkdir(parents=True, exist_ok=True)
         with self.conn() as c:
             c.executescript(SCHEMA)
+            user_cols = {r["name"] for r in c.execute("PRAGMA table_info(users)")}
+            if "stripe_customer_id" not in user_cols:
+                c.execute("ALTER TABLE users ADD COLUMN stripe_customer_id TEXT")
             cols = {r["name"] for r in c.execute("PRAGMA table_info(meetings)")}
             if "share_token" not in cols:
                 c.execute("ALTER TABLE meetings ADD COLUMN share_token TEXT")
@@ -111,6 +114,21 @@ class Database:
     def set_plan(self, email: str, plan: str) -> bool:
         with self.conn() as c:
             return c.execute("UPDATE users SET plan = ? WHERE email = ?", (plan, email)).rowcount > 0
+
+    def set_plan_by_id(self, user_id: int, plan: str, customer_id: str | None = None) -> bool:
+        with self.conn() as c:
+            if customer_id:
+                return c.execute(
+                    "UPDATE users SET plan = ?, stripe_customer_id = ? WHERE id = ?",
+                    (plan, customer_id, user_id),
+                ).rowcount > 0
+            return c.execute("UPDATE users SET plan = ? WHERE id = ?", (plan, user_id)).rowcount > 0
+
+    def set_plan_by_customer(self, customer_id: str, plan: str) -> bool:
+        with self.conn() as c:
+            return c.execute(
+                "UPDATE users SET plan = ? WHERE stripe_customer_id = ?", (plan, customer_id)
+            ).rowcount > 0
 
     def create_session(self, token: str, user_id: int, expires_at: str) -> None:
         with self.conn() as c:
