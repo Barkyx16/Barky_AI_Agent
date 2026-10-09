@@ -173,10 +173,18 @@ DEMO_OPENINGS = {
     ),
 }
 
+DEMO_OPENINGS["guest"] = (
+    "Speaking as **{name}**: the board is giving you solid analysis on **“{t}”**, so let me add "
+    "the perspective you invited me for. Ask yourself which choice you'd be prouder to explain "
+    "a year from now. **Pick the option you can commit to fully**, then give it a fair, "
+    "time-boxed chance.\n\n_Demo mode: with an API key connected, I speak fully in the voice you describe._"
+)
+
 DEMO_REBUTTALS = {
     "analyst": "I agree with **the Strategist**: a small test replaces guesses with data. The Skeptic's risks are real, but most of them are measurable, so let's measure them.",
     "skeptic": "**The Operator's** timeline eases my main concern. A fixed review date is exactly the exit line I asked for. I'd still resist moving fast before the numbers are in.",
     "strategist": "I partly disagree with **the Skeptic**: waiting for certainty is its own risk. But the Analyst is right that two conversations with people who've done it could change the picture.",
+    "guest": "From where I sit, **the Skeptic and the Strategist are both right**: protect the downside, but don't let fear make the decision for you.",
     "operator": "The Strategist's experiment fits step 3 exactly. The Skeptic convinced me to add one thing: **write the stop-rule down before you start**, not after.",
 }
 
@@ -190,7 +198,7 @@ class DemoEngine:
     async def take(self, advisor: Advisor, prompt: str) -> AsyncIterator[Event]:
         rebuttal = REBUTTAL_MARKER in prompt
         template = (DEMO_REBUTTALS if rebuttal else DEMO_OPENINGS)[advisor.key]
-        text = template.format(t=_topic(prompt))
+        text = template.format(t=_topic(prompt), name=advisor.name)
         # Stagger advisors so the discussion feels live.
         offset = int(hashlib.md5(advisor.key.encode()).hexdigest(), 16) % 5
         await asyncio.sleep(self.delay * offset * 4)
@@ -218,6 +226,7 @@ class DemoEngine:
                     {"advisor": "skeptic", "position": "mixed", "reason": "Only if the stop-rule is written first."},
                     {"advisor": "strategist", "position": "for", "reason": "The experiment is the third path."},
                     {"advisor": "operator", "position": "for", "reason": "It fits a clean 30-day plan."},
+                    {"advisor": "guest", "position": "for", "reason": "Commit fully, but time-box it."},
                 ],
                 "risks": [
                     "Costs in time and money that haven't been priced in yet.",

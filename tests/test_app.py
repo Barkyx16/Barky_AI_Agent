@@ -308,3 +308,39 @@ def test_login_is_throttled(tmp_path):
     codes = [client.post("/api/login", json={"email": "ada@example.com", "password": "wrong pass"}).status_code for _ in range(9)]
     assert codes[:8] == [401] * 8
     assert codes[8] == 429
+
+
+def test_guest_advisor_joins_the_board(tmp_path):
+    client = make_client(tmp_path)
+    signup(client)
+    guest = {"name": "Your future self", "perspective": "You, ten years from now, looking back."}
+    evs = events(client.post("/api/meetings", json={"question": "Should I move abroad?", "mode": "deep", "guest": guest}))
+    assert evs[0]["guest"] == {"key": "guest", "name": "Your future self", "role": "Guest advisor", "initials": "YF", "color": "#ec4899"}
+    done = [e["advisor"] for e in evs if e["type"] == "advisor_done"]
+    assert done.count("guest") == 2 and len(done) == 10
+    verdict = next(e["verdict"] for e in evs if e["type"] == "verdict")
+    assert "guest" in {v["advisor"] for v in verdict["votes"]}
+
+    meeting_id = evs[0]["id"]
+    m = client.get(f"/api/meetings/{meeting_id}").json()
+    assert m["guest"]["name"] == "Your future self"
+    assert any(t["member"] == "guest" and "Your future self" in t["text"] for t in m["takes"])
+
+    # Follow-ups keep the same guest seat.
+    follow = events(client.post("/api/meetings", json={"question": "And if I wait?", "parent_id": meeting_id}))
+    assert follow[0]["guest"]["name"] == "Your future self"
+
+
+def test_votes_only_from_advisors_present(tmp_path):
+    client = make_client(tmp_path)
+    signup(client)
+    evs = events(client.post("/api/meetings", json={"question": "No guest today"}))
+    assert evs[0]["guest"] is None
+    verdict = next(e["verdict"] for e in evs if e["type"] == "verdict")
+    assert {v["advisor"] for v in verdict["votes"]} == {"analyst", "skeptic", "strategist", "operator"}
+
+
+def test_guest_validation(tmp_path):
+    client = make_client(tmp_path)
+    signup(client)
+    assert client.post("/api/meetings", json={"question": "Valid?", "guest": {"name": "X"}}).status_code == 422

@@ -10,11 +10,13 @@ Boardroom gives anyone a private board of AI advisors. You bring a decision ("Sh
 | **The Skeptic** | Risks and blind spots. Pushes back honestly. |
 | **The Strategist** | Options and leverage. Finds the third path. |
 | **The Operator** | Execution. Turns the decision into steps you can start today. |
+| **Guest advisor** | Optional fifth seat you choose, e.g. *Your future self*, *A seasoned founder*, *A frugal planner*, or anyone you describe. |
 | **The Chair** | Weighs the debate and rules, with a structured verdict and plan. |
 
 ### Features
 
 - **Live, parallel debate.** All four advisors stream at the same time.
+- **Guest advisors.** Seat anyone at the table with a name and perspective, or pick a preset. They debate alongside the board and get a vote, and follow-ups keep the same guest.
 - **Deep debate mode (Pro).** Adds a rebuttal round where advisors challenge each other before the Chair rules.
 - **Verdict card.** Headline, confidence ring, each advisor's vote, risks, first move, and an action plan.
 - **Plan tracking.** Check off steps; progress shows in the sidebar for every meeting.
@@ -89,4 +91,4 @@ python -m pytest
 1. Stripe Checkout and a billing webhook that calls `set_plan`.
 2. Password reset and email verification.
 3. Reminder emails for plan steps and the review date.
-4. Custom boards: let users add advisors (e.g. "My Accountant", "Devil's Advocate") or seat famous-thinker personas.
+4. Saved custom boards: reusable guest lineups per user.

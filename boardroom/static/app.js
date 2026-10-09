@@ -11,6 +11,7 @@ const state = {
   live: null,        // live meeting being streamed
   mode: "quick",
   draft: { question: "", context: "" },
+  guest: { name: "", perspective: "" },
 };
 
 const EXAMPLES = [
@@ -22,9 +23,17 @@ const EXAMPLES = [
   "How should I price my first freelance design project?",
 ];
 
+const GUEST_PRESETS = [
+  { name: "Your future self", perspective: "You, ten years from now, looking back on this decision with hindsight and honesty." },
+  { name: "A seasoned founder", perspective: "Someone who has started and sold companies; bias to action, allergic to waste." },
+  { name: "A frugal planner", perspective: "A conservative financial planner focused on cash flow, emergency funds, and long-term security." },
+  { name: "A wise grandparent", perspective: "Decades of life experience; cares most about relationships, health, and regret." },
+];
+
 const $app = document.getElementById("app");
-const advisorsByKey = () => Object.fromEntries(state.config.board.map((a) => [a.key, a]));
+const advisorsByKey = (guest) => Object.fromEntries([...state.config.board, ...(guest ? [guest] : [])].map((a) => [a.key, a]));
 const boardAdvisors = () => state.config.board.filter((a) => a.key !== "chair");
+const seatsFor = (guest) => (guest ? [...boardAdvisors(), guest] : boardAdvisors());
 
 /* ---------- utilities ---------------------------------------------------- */
 
@@ -358,6 +367,18 @@ function renderComposer(prefill) {
         <label class="sr-only" for="context">Background</label>
         <textarea class="textarea" id="context" maxlength="6000" placeholder="Anything the board should know: numbers, constraints, what you've tried, what matters most to you.">${esc(state.draft.context)}</textarea>
       </details>
+      <details class="guest-seat" ${state.guest.name ? "open" : ""}>
+        <summary>Seat a guest advisor (optional)</summary>
+        <div class="guest-fields">
+          <div class="chips">${GUEST_PRESETS.map((g, i) => `<button class="chip guest-preset" type="button" data-preset="${i}">${esc(g.name)}</button>`).join("")}</div>
+          <div class="guest-row">
+            <label class="sr-only" for="guest-name">Guest name</label>
+            <input class="input" id="guest-name" maxlength="60" placeholder="Who should join? e.g. “My business mentor”" value="${esc(state.guest.name)}">
+            <label class="sr-only" for="guest-perspective">Their perspective</label>
+            <input class="input" id="guest-perspective" maxlength="400" placeholder="What perspective do they bring?" value="${esc(state.guest.perspective)}">
+          </div>
+        </div>
+      </details>
       <div class="composer-foot">
         <div>
           <div class="segmented" role="group" aria-label="Meeting type">
@@ -393,7 +414,16 @@ function renderComposer(prefill) {
     view.querySelectorAll("[data-mode]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
     setHint();
   }));
-  view.querySelectorAll(".chip").forEach((c) => c.addEventListener("click", () => {
+  const gName = document.getElementById("guest-name");
+  const gPersp = document.getElementById("guest-perspective");
+  gName.addEventListener("input", () => { state.guest.name = gName.value; });
+  gPersp.addEventListener("input", () => { state.guest.perspective = gPersp.value; });
+  view.querySelectorAll(".guest-preset").forEach((c) => c.addEventListener("click", () => {
+    const g = GUEST_PRESETS[Number(c.dataset.preset)];
+    gName.value = g.name; gPersp.value = g.perspective;
+    state.guest = { ...g };
+  }));
+  view.querySelectorAll(".examples .chip").forEach((c) => c.addEventListener("click", () => {
     q.value = c.textContent; state.draft.question = q.value; q.focus();
   }));
   const form = document.getElementById("composer");
@@ -408,7 +438,15 @@ function renderComposer(prefill) {
       q.focus();
       return;
     }
-    convene({ question, context: ctx.value.trim(), mode: state.mode });
+    const guestName = gName.value.trim();
+    if (guestName && guestName.length < 2) {
+      document.getElementById("composer-error").textContent = "Give your guest advisor a name of at least two letters.";
+      gName.focus();
+      return;
+    }
+    const body = { question, context: ctx.value.trim(), mode: state.mode };
+    if (guestName) body.guest = { name: guestName, perspective: gPersp.value.trim() };
+    convene(body);
   });
 }
 
@@ -417,7 +455,7 @@ function renderComposer(prefill) {
 function newLive(body) {
   const remarks = {};
   for (const a of boardAdvisors()) remarks[a.key] = { 1: freshRemark(), 2: freshRemark() };
-  return { id: null, question: body.question, context: body.context, mode: body.mode, rounds: [1], remarks, chair: "waiting", verdict: null, steps: [], error: null, running: true };
+  return { id: null, guest: null, question: body.question, context: body.context, mode: body.mode, rounds: [1], remarks, chair: "waiting", verdict: null, steps: [], error: null, running: true };
 }
 
 function freshRemark() { return { text: "", status: "Thinking…", done: false, sources: [] }; }
@@ -448,6 +486,7 @@ async function convene(body) {
   }
 
   state.draft = { question: "", context: "" };
+  state.guest = { name: "", perspective: "" };
   const live = newLive(body);
   state.live = live;
   const reader = res.body.getReader();
@@ -479,6 +518,7 @@ function handleEvent(live, ev) {
   switch (ev.type) {
     case "meeting":
       live.id = ev.id;
+      if (ev.guest) { live.guest = ev.guest; live.remarks.guest = { 1: freshRemark(), 2: freshRemark() }; }
       location.hash = `#/m/${ev.id}`;
       refreshSidebar();
       return;
@@ -538,7 +578,7 @@ function renderLive() {
     view.innerHTML = meetingLayout({
       question: live.question, context: live.context, mode: live.mode, created_at: null, running: live.running,
       shareable: !!live.verdict, share_token: live.share_token,
-    }, live.rounds, (round) => boardAdvisors().map((a) => remarkCard(a, live.remarks[a.key][round], round)).join(""))
+    }, live.rounds, (round) => seatsFor(live.guest).map((a) => remarkCard(a, live.remarks[a.key][round], round)).join(""))
       + chairSection(live)
       + (live.error ? errorBox(live.error) : "");
     view.dataset.layout = layoutKey;
@@ -547,7 +587,7 @@ function renderLive() {
     return;
   }
   for (const round of live.rounds) {
-    for (const a of boardAdvisors()) {
+    for (const a of seatsFor(live.guest)) {
       const card = view.querySelector(`[data-card="${a.key}-${round}"]`);
       if (!card) continue;
       const r = live.remarks[a.key][round];
@@ -613,7 +653,7 @@ function remarkCard(a, r, round) {
 
 function chairSection(m) {
   const chair = advisorsByKey().chair;
-  if (m.verdict) return `<div class="section-title">The verdict</div>` + verdictCard(m.verdict, m.steps) + followupBox();
+  if (m.verdict) return `<div class="section-title">The verdict</div>` + verdictCard(m.verdict, m.steps, false, m.guest) + followupBox();
   if (m.chair === "deliberating") {
     return `<div class="section-title">The verdict</div>
       <div class="card chair-wait"><div class="avatar" data-c="${chair.color}">${chair.initials}</div><p>The Chair is weighing the arguments…</p><div class="spinner"></div></div>`;
@@ -621,8 +661,8 @@ function chairSection(m) {
   return "";
 }
 
-function verdictCard(v, steps, readonly = false) {
-  const by = advisorsByKey();
+function verdictCard(v, steps, readonly = false, guest = null) {
+  const by = advisorsByKey(guest);
   const chair = by.chair;
   const done = steps.filter((s) => s.done).length;
   const pct = steps.length ? Math.round((100 * done) / steps.length) : 0;
@@ -756,12 +796,12 @@ async function loadMeeting(id) {
   for (const t of m.takes) byKey[`${t.member}-${t.round}`] = t;
   const stalled = m.status !== "done";
   m.shareable = m.status === "done";
-  view.innerHTML = meetingLayout(m, rounds, (round) => boardAdvisors().map((a) => {
+  view.innerHTML = meetingLayout(m, rounds, (round) => seatsFor(m.guest).map((a) => {
     const t = byKey[`${a.key}-${round}`];
     const r = t ? { text: t.text, done: true, status: "Done", sources: t.sources } : { text: "", done: false, status: stalled ? "No remarks" : "Thinking…", sources: [] };
     return remarkCard(a, r, round);
   }).join(""))
-    + (m.verdict ? `<div class="section-title">The verdict</div>${verdictCard(m.verdict, m.steps)}${followupBox()}` : "")
+    + (m.verdict ? `<div class="section-title">The verdict</div>${verdictCard(m.verdict, m.steps, false, m.guest)}${followupBox()}` : "")
     + (stalled ? errorBox(m.status === "running" ? "This meeting is still in session in another tab." : "This meeting didn't finish.") : "");
   applyStyles(view);
   bindMeetingActions(view, m);
@@ -831,11 +871,11 @@ async function renderShared(token) {
         <a class="btn btn-primary btn-sm" href="/">Convene your own board</a>
       </header>
       <main class="main"><div class="container">
-        ${meetingLayout({ ...m, readonly: true }, rounds.length ? rounds : [1], (round) => boardAdvisors().map((a) => {
+        ${meetingLayout({ ...m, readonly: true }, rounds.length ? rounds : [1], (round) => seatsFor(m.guest).map((a) => {
           const t = byKey[`${a.key}-${round}`];
           return remarkCard(a, { text: t ? t.text : "", done: true, status: "Done", sources: t ? t.sources : [] }, round);
         }).join(""))}
-        ${m.verdict ? `<div class="section-title">The verdict</div>${verdictCard(m.verdict, m.steps, true)}` : ""}
+        ${m.verdict ? `<div class="section-title">The verdict</div>${verdictCard(m.verdict, m.steps, true, m.guest)}` : ""}
         <section class="cta card">
           <h2>Have a decision of your own?</h2>
           <p>Bring it to a private board of AI advisors. They debate it live, and the Chair hands you a verdict and a plan.</p>

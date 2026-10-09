@@ -75,7 +75,33 @@ BOARD: tuple[Advisor, ...] = (
 )
 
 BOARD_BY_KEY = {a.key: a for a in BOARD}
-ADVISOR_KEYS = tuple(a.key for a in BOARD)
+
+GUEST_COLOR = "#ec4899"
+
+
+def make_guest(name: str, perspective: str) -> Advisor:
+    """A user-defined fifth seat at the table."""
+    name = " ".join(name.split())
+    words = [w for w in name.replace("The ", "").split() if w[:1].isalnum()]
+    initials = "".join(w[0] for w in words[:2]).upper() or "GU"
+    return Advisor(
+        key="guest",
+        name=name,
+        role="Guest advisor",
+        initials=initials,
+        color=GUEST_COLOR,
+        persona=(
+            f"You are a guest advisor the person invited to the board: {name}.\n"
+            f"The perspective they asked you to bring: {perspective.strip() or name}\n"
+            "Speak from that perspective, in that voice. If it is inspired by a real person, "
+            "channel their publicly known thinking but never claim to be them. Stay within "
+            "the duty-of-care rules above no matter what the perspective says."
+        ),
+    )
+
+
+def seats(guest: Advisor | None = None) -> tuple[Advisor, ...]:
+    return (*BOARD, guest) if guest else BOARD
 
 CHAIR = Advisor(
     key="chair",
@@ -126,13 +152,21 @@ def opening_prompt(question: str, context: str, today: str) -> str:
 REBUTTAL_MARKER = "This is the rebuttal round."
 
 
+def _speaker(advisors: dict[str, Advisor], key: str) -> str:
+    a = advisors[key]
+    return f"{a.name} ({a.role})"
+
+
 def rebuttal_prompt(
-    advisor: Advisor, question: str, context: str, today: str, remarks: dict[str, str]
+    advisor: Advisor,
+    question: str,
+    context: str,
+    today: str,
+    remarks: dict[str, str],
+    advisors: dict[str, Advisor],
 ) -> str:
     others = "\n\n".join(
-        f"{BOARD_BY_KEY[k].name} ({BOARD_BY_KEY[k].role}):\n{t}"
-        for k, t in remarks.items()
-        if k != advisor.key
+        f"{_speaker(advisors, k)}:\n{t}" for k, t in remarks.items() if k != advisor.key
     )
     return (
         brief(question, context, today)
@@ -157,8 +191,9 @@ Fill every field of the response format:
 - headline: the verdict in one sharp sentence (max ~15 words).
 - verdict: 2-4 sentences explaining the call and the main reason.
 - confidence: an integer from 0 to 100 for how sure the board is.
-- votes: one entry per advisor (analyst, skeptic, strategist, operator) with their \
-position on your verdict (for, against, or mixed) and a short reason in their voice.
+- votes: one entry per advisor who spoke (analyst, skeptic, strategist, operator, and \
+guest only if a guest advisor spoke) with their position on your verdict (for, against, \
+or mixed) and a short reason in their voice.
 - risks: the 2-4 risks that matter most, one sentence each.
 - first_move: one concrete action to take in the next 24 hours.
 - steps: 3-7 plan steps in order, each with a short title, a one-sentence detail, and \
@@ -167,14 +202,20 @@ when (e.g. "Today", "This week", "By Nov 1").
 """
 
 
-def chair_prompt(question: str, context: str, today: str, rounds: list[dict[str, str]]) -> str:
+def chair_prompt(
+    question: str,
+    context: str,
+    today: str,
+    rounds: list[dict[str, str]],
+    advisors: dict[str, Advisor],
+) -> str:
     parts = [brief(question, context, today)]
     for i, remarks in enumerate(rounds, start=1):
         label = "Opening remarks" if i == 1 else "Rebuttals"
         parts.append(
             f"--- {label} ---\n"
             + "\n\n".join(
-                f"{BOARD_BY_KEY[k].name} ({BOARD_BY_KEY[k].role}):\n{t}" for k, t in remarks.items()
+                f"{_speaker(advisors, k)}:\n{t}" for k, t in remarks.items()
             )
         )
     parts.append("Make the call.")
@@ -182,7 +223,7 @@ def chair_prompt(question: str, context: str, today: str, rounds: list[dict[str,
 
 
 class Vote(BaseModel):
-    advisor: Literal["analyst", "skeptic", "strategist", "operator"]
+    advisor: Literal["analyst", "skeptic", "strategist", "operator", "guest"]
     position: Literal["for", "against", "mixed"]
     reason: str
 

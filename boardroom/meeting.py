@@ -11,7 +11,7 @@ import logging
 from datetime import date
 from typing import Any, AsyncIterator
 
-from .board import BOARD, chair_prompt, opening_prompt, rebuttal_prompt
+from .board import Advisor, chair_prompt, opening_prompt, rebuttal_prompt, seats
 from .db import Database
 from .engine import Engine, EngineError
 
@@ -21,6 +21,7 @@ log = logging.getLogger(__name__)
 
 async def _run_round(
     engine: Engine,
+    board: tuple[Advisor, ...],
     round_no: int,
     prompts: dict[str, str],
     db: Database,
@@ -51,7 +52,7 @@ async def _run_round(
         finally:
             await queue.put(_DONE)
 
-    tasks = [asyncio.create_task(speak(a)) for a in BOARD]
+    tasks = [asyncio.create_task(speak(a)) for a in board]
     remaining = len(tasks)
     try:
         while remaining:
@@ -75,31 +76,35 @@ async def run_meeting(
     question: str,
     context: str,
     mode: str,
+    guest: Advisor | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
+    board = seats(guest)
+    by_key = {a.key: a for a in board}
     today = date.today().strftime("%A, %B %d, %Y")
     finished = False
     try:
         yield {"type": "round_start", "round": 1}
         opening: dict[str, str] = {}
-        prompts = {a.key: opening_prompt(question, context, today) for a in BOARD}
-        async for event in _run_round(engine, 1, prompts, db, meeting_id, opening):
+        prompts = {a.key: opening_prompt(question, context, today) for a in board}
+        async for event in _run_round(engine, board, 1, prompts, db, meeting_id, opening):
             yield event
-        rounds = [dict((a.key, opening.get(a.key, "")) for a in BOARD)]
+        rounds = [dict((a.key, opening.get(a.key, "")) for a in board)]
 
         if mode == "deep":
             yield {"type": "round_start", "round": 2}
             rebuttals: dict[str, str] = {}
             prompts = {
-                a.key: rebuttal_prompt(a, question, context, today, rounds[0]) for a in BOARD
+                a.key: rebuttal_prompt(a, question, context, today, rounds[0], by_key) for a in board
             }
-            async for event in _run_round(engine, 2, prompts, db, meeting_id, rebuttals):
+            async for event in _run_round(engine, board, 2, prompts, db, meeting_id, rebuttals):
                 yield event
-            rounds.append(dict((a.key, rebuttals.get(a.key, "")) for a in BOARD))
+            rounds.append(dict((a.key, rebuttals.get(a.key, "")) for a in board))
 
         yield {"type": "chair_start"}
-        verdict = await engine.verdict(chair_prompt(question, context, today, rounds))
+        verdict = await engine.verdict(chair_prompt(question, context, today, rounds, by_key))
         data = verdict.model_dump()
         data["confidence"] = max(0, min(100, int(data["confidence"])))
+        data["votes"] = [v for v in data["votes"] if v["advisor"] in by_key]
         db.finish_meeting(meeting_id, data)
         finished = True
         yield {"type": "verdict", "verdict": data}

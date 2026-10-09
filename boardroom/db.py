@@ -70,6 +70,8 @@ class Database:
             cols = {r["name"] for r in c.execute("PRAGMA table_info(meetings)")}
             if "share_token" not in cols:
                 c.execute("ALTER TABLE meetings ADD COLUMN share_token TEXT")
+            if "guest" not in cols:
+                c.execute("ALTER TABLE meetings ADD COLUMN guest TEXT")
             c.execute(
                 "CREATE UNIQUE INDEX IF NOT EXISTS meetings_share ON meetings(share_token) "
                 "WHERE share_token IS NOT NULL"
@@ -132,13 +134,19 @@ class Database:
     # ---- meetings ---------------------------------------------------------
 
     def create_meeting(
-        self, user_id: int, question: str, context: str, mode: str, parent_id: int | None
+        self,
+        user_id: int,
+        question: str,
+        context: str,
+        mode: str,
+        parent_id: int | None,
+        guest: dict[str, str] | None = None,
     ) -> int:
         with self.conn() as c:
             cur = c.execute(
-                "INSERT INTO meetings (user_id, parent_id, question, context, mode, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (user_id, parent_id, question, context, mode, now_iso()),
+                "INSERT INTO meetings (user_id, parent_id, question, context, mode, guest, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (user_id, parent_id, question, context, mode, json.dumps(guest) if guest else None, now_iso()),
             )
             return int(cur.lastrowid)
 
@@ -233,6 +241,7 @@ class Database:
             "status": row["status"],
             "created_at": row["created_at"],
             "share_token": row["share_token"],
+            "guest": json.loads(row["guest"]) if row["guest"] else None,
             "verdict": json.loads(row["verdict"]) if row["verdict"] else None,
             "takes": [
                 {
@@ -299,6 +308,7 @@ class Database:
         return {
             "question": meeting["question"],
             "mode": meeting["mode"],
+            "guest": meeting["guest"],
             "created_at": meeting["created_at"],
             "verdict": meeting["verdict"],
             "takes": meeting["takes"],

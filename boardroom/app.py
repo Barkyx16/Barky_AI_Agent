@@ -17,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import auth
-from .board import board_public
+from .board import GUEST_COLOR, board_public, make_guest
 from .config import Settings
 from .db import Database
 from .engine import Engine, make_engine
@@ -39,11 +39,17 @@ class LoginIn(BaseModel):
     password: str = Field(max_length=200)
 
 
+class GuestIn(BaseModel):
+    name: str = Field(min_length=2, max_length=60)
+    perspective: str = Field(default="", max_length=400)
+
+
 class MeetingIn(BaseModel):
     question: str = Field(min_length=3, max_length=2000)
     context: str = Field(default="", max_length=6000)
     mode: Literal["quick", "deep"] = "quick"
     parent_id: int | None = None
+    guest: GuestIn | None = None
 
 
 class StepIn(BaseModel):
@@ -171,7 +177,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         found = db.get_meeting(user["id"], meeting_id)
         if found is None:
             raise HTTPException(status_code=404, detail="Meeting not found.")
-        return found
+        return with_guest_card(found)
 
     @app.delete("/api/meetings/{meeting_id}")
     def delete_meeting(meeting_id: int, user=Depends(current_user)):
@@ -202,7 +208,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         found = db.shared_meeting(token)
         if found is None:
             raise HTTPException(status_code=404, detail="This link is no longer shared.")
-        return found
+        return with_guest_card(found)
 
     @app.patch("/api/steps/{step_id}")
     def update_step(step_id: int, body: StepIn, user=Depends(current_user)):
@@ -224,6 +230,9 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
 
         question = body.question.strip()
         context = body.context.strip()
+        guest = body.guest.model_dump() if body.guest else None
+        if guest:
+            guest = {"name": " ".join(guest["name"].split()), "perspective": guest["perspective"].strip()}
         if body.parent_id is not None:
             parent = db.get_meeting(user["id"], body.parent_id)
             if parent is None:
@@ -235,12 +244,14 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             if parent["context"]:
                 earlier += f"\nEarlier background: {parent['context']}"
             context = f"{earlier}\n\n{context}".strip()
+            guest = guest or parent["guest"]
 
-        meeting_id = db.create_meeting(user["id"], question, context, body.mode, body.parent_id)
+        meeting_id = db.create_meeting(user["id"], question, context, body.mode, body.parent_id, guest)
+        guest_advisor = make_guest(guest["name"], guest["perspective"]) if guest else None
 
         async def stream():
-            yield _sse({"type": "meeting", "id": meeting_id, "mode": body.mode})
-            async for event in run_meeting(engine, db, meeting_id, question, context, body.mode):
+            yield _sse({"type": "meeting", "id": meeting_id, "mode": body.mode, "guest": guest_public(guest_advisor)})
+            async for event in run_meeting(engine, db, meeting_id, question, context, body.mode, guest_advisor):
                 yield _sse(event)
 
         return StreamingResponse(
@@ -262,6 +273,18 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         return {"ok": True, "engine": engine.name}
 
     return app
+
+
+def with_guest_card(meeting: dict) -> dict:
+    g = meeting.get("guest")
+    meeting["guest"] = guest_public(make_guest(g["name"], g["perspective"])) if g else None
+    return meeting
+
+
+def guest_public(advisor) -> dict | None:
+    if advisor is None:
+        return None
+    return {"key": "guest", "name": advisor.name, "role": advisor.role, "initials": advisor.initials, "color": GUEST_COLOR}
 
 
 def _sse(event: dict) -> str:
