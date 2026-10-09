@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import html
 import json
 import logging
 import re
@@ -17,7 +18,7 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -526,9 +527,43 @@ def create_app(
 
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
+    page = (STATIC / "index.html").read_text()
+
+    def render_page(request: Request, title: str, description: str, path: str) -> HTMLResponse:
+        base = settings.public_url or str(request.base_url).rstrip("/")
+        values = {
+            "__TITLE__": title,
+            "__DESCRIPTION__": description,
+            "__IMAGE__": f"{base}/static/og.png",
+            "__URL__": f"{base}{path}",
+        }
+        out = page
+        for key, value in values.items():
+            out = out.replace(key, html.escape(value, quote=True))
+        return HTMLResponse(out)
+
     @app.get("/")
-    def index():
-        return FileResponse(STATIC / "index.html")
+    def index(request: Request):
+        return render_page(
+            request,
+            "Boardroom — your private board of advisors",
+            "Bring any hard decision to a private board of AI advisors. Watch them debate it "
+            "live, then get a verdict and an action plan.",
+            "/",
+        )
+
+    @app.get("/s/{token}")
+    def shared_page(token: str, request: Request):
+        found = db.shared_meeting(token)
+        if found is None or not found["verdict"]:
+            return index(request)
+        v = found["verdict"]
+        return render_page(
+            request,
+            f"“{found['question'][:120]}” — the board's verdict",
+            f"{v['headline']} ({v['confidence']}% confidence). Debated by an AI board of advisors on Boardroom.",
+            f"/s/{token}",
+        )
 
     @app.get("/healthz")
     def health():

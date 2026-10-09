@@ -1045,7 +1045,7 @@ function showShare(m, button) {
   document.body.appendChild(back);
   const close = () => back.remove();
   back.addEventListener("click", (e) => { if (e.target === back) close(); });
-  const linkFor = (token) => `${location.origin}/#/s/${token}`;
+  const linkFor = (token) => `${location.origin}/s/${token}`;
   const paint = () => {
     back.innerHTML = m.share_token ? `
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="sh-title">
@@ -1243,7 +1243,7 @@ async function renderShared(token, sample = false) {
 
 async function boot() {
   initTheme();
-  const shared = location.hash.match(/^#\/s\/([\w-]+)/);
+  const shared = location.pathname.match(/^\/s\/([\w-]+)\/?$/) || location.hash.match(/^#\/s\/([\w-]+)/);
   try {
     state.config = await api("/api/config");
   } catch (_) {

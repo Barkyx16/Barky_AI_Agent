@@ -737,3 +737,22 @@ def test_reminders_respect_opt_out(tmp_path):
         c.execute("UPDATE meetings SET review_at = ?", (date.today().isoformat(),))
     assert client.app.state.send_review_reminders() == 0
     assert mailer.sent == []
+
+
+def test_shared_page_has_link_preview_tags(tmp_path):
+    client = make_client(tmp_path, public_url="https://boardroom.app")
+    signup(client)
+    evs = events(client.post("/api/meetings", json={"question": 'Should I quit? <script>alert("x")</script>'}))
+    token = client.post(f"/api/meetings/{evs[0]['id']}/share").json()["token"]
+    client.post("/api/logout")
+    page = client.get(f"/s/{token}")
+    assert page.status_code == 200
+    assert '<meta property="og:title" content="“Should I quit? &lt;script&gt;' in page.text
+    assert "<script>alert" not in page.text
+    assert "72% confidence" in page.text
+    assert 'content="https://boardroom.app/static/og.png"' in page.text
+    assert f'content="https://boardroom.app/s/{token}"' in page.text
+    # Unknown tokens fall back to the normal page (the app shows "no longer shared").
+    fallback = client.get("/s/unknown-token")
+    assert fallback.status_code == 200 and "your private board of advisors" in fallback.text
+    assert client.get("/static/og.png").headers["content-type"] == "image/png"

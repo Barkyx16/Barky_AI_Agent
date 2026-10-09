@@ -26,7 +26,7 @@ Boardroom gives anyone a private board of AI advisors. You bring a decision ("Sh
 - **Plan tracking.** Check off steps; progress shows in the sidebar for every meeting.
 - **Follow-ups.** Reconvene the board on an earlier decision ("What if I wait six months?") with the earlier verdict as context.
 - **Sample meeting.** Visitors can read a full example meeting from the landing page before signing up.
-- **Shareable verdicts.** One click creates a public read-only link to the debate and verdict, with a sign-up call to action. Private background notes and progress are never shared.
+- **Shareable verdicts.** One click creates a public read-only link (`/s/<token>`, with a rich preview card showing the question and verdict in iMessage, WhatsApp, Slack and X) to the debate and verdict, with a sign-up call to action. Private background notes and progress are never shared.
 - **Accounts and plans.** Email sign-up, a free daily quota, and a Pro plan with unlimited meetings and deep debates.
 - **Demo mode.** Runs with scripted advisors when no API key is set, so anyone can try the full experience.
 - **Polished UI.** Responsive from phone to desktop, light and dark themes, keyboard shortcuts (⌘/Ctrl+Enter), accessible markup, and no build step.
