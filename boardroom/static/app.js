@@ -167,6 +167,36 @@ const ICON_GEAR = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" s
 const ICON_MENU = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>`;
 const ICON_PLUS = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>`;
 
+/* ---------- dialogs ------------------------------------------------------ */
+
+/* Shows a dialog: Escape closes it, Tab stays inside, focus returns to the opener. */
+function openModal(back) {
+  const opener = document.activeElement;
+  document.body.appendChild(back);
+  const watcher = new MutationObserver(() => {
+    if (!back.isConnected) {
+      watcher.disconnect();
+      if (opener && opener.isConnected) opener.focus();
+    }
+  });
+  watcher.observe(document.body, { childList: true });
+}
+
+document.addEventListener("keydown", (e) => {
+  const backs = document.querySelectorAll(".modal-back");
+  const top = backs[backs.length - 1];
+  if (!top) return;
+  if (e.key === "Escape") { e.preventDefault(); top.remove(); return; }
+  if (e.key !== "Tab") return;
+  const items = [...top.querySelectorAll("button, a[href], input, summary, textarea, [tabindex]:not([tabindex='-1'])")]
+    .filter((el) => !el.disabled && el.offsetParent !== null);
+  if (!items.length) return;
+  const first = items[0], last = items[items.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  else if (!top.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+});
+
 /* ---------- landing / auth ---------------------------------------------- */
 
 function renderLanding(tab = "signup") {
@@ -303,6 +333,8 @@ function renderShell() {
         <div class="brand"><img src="/static/favicon.svg" alt=""> Boardroom</div>
         <a class="btn btn-primary btn-block" href="#/new">${ICON_PLUS} New meeting</a>
         ${state.user.is_admin ? `<a class="admin-link" href="#/admin">Owner dashboard</a>` : ""}
+        <label class="sr-only" for="search">Search meetings</label>
+        <input class="input search" id="search" type="search" placeholder="Search meetings" autocomplete="off">
         <nav class="history" id="history"></nav>
         <div class="account" id="account"></div>
       </aside>
@@ -318,6 +350,7 @@ function renderShell() {
     </div>`;
   document.getElementById("menu").addEventListener("click", () => document.getElementById("shell").classList.add("nav-open"));
   document.getElementById("scrim").addEventListener("click", closeNav);
+  document.getElementById("search").addEventListener("input", (e) => { state.filter = e.target.value; renderHistory(); });
   renderHistory();
   renderAccount();
 }
@@ -331,7 +364,13 @@ function renderHistory() {
     el.innerHTML = `<h4>Your meetings</h4><p class="empty-history">No meetings yet. Your first one is a question away.</p>`;
     return;
   }
-  el.innerHTML = `<h4>Your meetings</h4>` + state.meetings.map((m) => {
+  const q = (state.filter || "").trim().toLowerCase();
+  const shown = q ? state.meetings.filter((m) => `${m.question} ${m.headline || ""}`.toLowerCase().includes(q)) : state.meetings;
+  if (!shown.length) {
+    el.innerHTML = `<h4>Your meetings</h4><p class="empty-history">No meetings match “${esc(state.filter.trim())}”.</p>`;
+    return;
+  }
+  el.innerHTML = `<h4>${q ? `${shown.length} found` : "Your meetings"}</h4>` + shown.map((m) => {
     const pct = m.total_steps ? Math.round((100 * m.done_steps) / m.total_steps) : 0;
     const meta = m.status === "done"
       ? `<span class="mini-bar"><i data-w="${pct}"></i></span><span>${m.done_steps}/${m.total_steps}</span>${isDue(m.review_at) ? '<span class="due">Review due</span>' : ""}`
@@ -391,7 +430,7 @@ function showUpgrade() {
         : `<p class="fine">Pro upgrades are handled by the site owner. Contact them to upgrade your account.</p>
            <div class="actions"><button class="btn btn-primary" id="close-up">Got it</button></div>`}
     </div>`;
-  document.body.appendChild(back);
+  openModal(back);
   const close = () => back.remove();
   back.addEventListener("click", (e) => { if (e.target === back) close(); });
   back.querySelector("#close-up").addEventListener("click", close);
@@ -443,7 +482,7 @@ function showSettings() {
       </details>
       <div class="actions"><button class="btn btn-ghost" id="set-close">Close</button></div>
     </div>`;
-  document.body.appendChild(back);
+  openModal(back);
   const close = () => back.remove();
   back.addEventListener("click", (e) => { if (e.target === back) close(); });
   back.querySelector("#set-close").addEventListener("click", close);
@@ -1042,7 +1081,7 @@ async function loadMeeting(id) {
 function showShare(m, button) {
   const back = document.createElement("div");
   back.className = "modal-back";
-  document.body.appendChild(back);
+  openModal(back);
   const close = () => back.remove();
   back.addEventListener("click", (e) => { if (e.target === back) close(); });
   const linkFor = (token) => `${location.origin}/s/${token}`;
