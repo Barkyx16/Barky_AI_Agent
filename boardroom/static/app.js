@@ -168,6 +168,7 @@ function renderLanding(tab = "signup") {
         <p class="lede">Bring any decision to a private board of AI advisors. They research the facts, argue it out in front of you, and the Chair hands you a verdict and a plan you can start today.</p>
         <div class="seats">${seats}</div>
         <div class="how"><span><b>1</b>Ask your question</span><span><b>2</b>Watch the board debate</span><span><b>3</b>Get a verdict and a plan</span></div>
+        <p class="sample-link"><a class="btn" href="/#/sample">See a sample meeting →</a></p>
       </section>
       <section class="landing-auth">
         <div class="auth-card">
@@ -409,6 +410,11 @@ function showSettings() {
         <p class="error-text" id="pw-error"></p>
         <button class="btn" type="submit">Update password</button>
       </form>
+      <div class="settings-block">
+        <h3>Your data</h3>
+        <p class="fine left">Download every meeting, verdict and plan as a JSON file.</p>
+        <a class="btn" href="/api/account/export" download>Download my data</a>
+      </div>
       <details class="settings-block danger">
         <summary>Delete account</summary>
         <form id="del-form">
@@ -489,7 +495,7 @@ function route() {
 }
 
 window.addEventListener("hashchange", () => {
-  if (/^#\/s\//.test(location.hash) || document.querySelector(".public")) { location.reload(); return; }
+  if (/^#\/s\//.test(location.hash) || location.hash === "#/sample" || document.querySelector(".public")) { location.reload(); return; }
   if (!state.user) {
     const reset = location.hash.match(/^#\/reset\/([\w-]+)/);
     if (reset) renderReset(reset[1]);
@@ -786,7 +792,7 @@ function renderLive() {
 /* ---------- meeting rendering (shared by live & saved) ------------------- */
 
 function meetingLayout(m, rounds, cardsFor) {
-  const when = m.created_at ? timeAgo(m.created_at) : "Now";
+  const when = m.created_at ? timeAgo(m.created_at) : m.readonly ? "Example" : "Now";
   const mode = m.mode === "deep" ? "Deep debate" : "Quick session";
   return `
     ${m.readonly ? "" : demoBanner()}
@@ -1162,10 +1168,10 @@ async function renderAdmin() {
 
 /* ---------- public shared view ------------------------------------------ */
 
-async function renderShared(token) {
+async function renderShared(token, sample = false) {
   let m;
   try {
-    m = await api(`/api/shared/${encodeURIComponent(token)}`);
+    m = await api(sample ? "/api/sample" : `/api/shared/${encodeURIComponent(token)}`);
   } catch (err) {
     $app.innerHTML = `<div class="public"><header class="public-bar"><a class="brand" href="/"><img src="/static/favicon.svg" alt=""> Boardroom</a></header>
       <main class="container narrow"><div class="alert" role="alert"><span>${esc(err.message)}</span><a class="btn btn-sm" href="/">Go to Boardroom</a></div></main></div>`;
@@ -1182,6 +1188,7 @@ async function renderShared(token) {
         <a class="btn btn-primary btn-sm" href="/">Convene your own board</a>
       </header>
       <main class="main"><div class="container">
+        ${sample ? `<div class="demo-banner"><span class="badge">Sample</span>This is an example meeting. Yours will be about your own decision, with live research from the Analyst.</div>` : ""}
         ${meetingLayout({ ...m, readonly: true }, rounds.length ? rounds : [1], (round) => seatsFor(m.guest).map((a) => {
           const t = byKey[`${a.key}-${round}`];
           return remarkCard(a, { text: t ? t.text : "", done: true, status: "Done", sources: t ? t.sources : [] }, round);
@@ -1209,6 +1216,7 @@ async function boot() {
     return;
   }
   if (shared) { renderShared(shared[1]); return; }
+  if (location.hash === "#/sample") { renderShared(null, true); return; }
   const reset = location.hash.match(/^#\/reset\/([\w-]+)/);
   if (reset) { renderReset(reset[1]); return; }
   try {

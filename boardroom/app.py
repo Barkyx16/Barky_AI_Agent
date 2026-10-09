@@ -29,6 +29,7 @@ from .db import Database
 from .engine import Engine, make_engine
 from .hub import MeetingHub
 from .mailer import Mailer
+from .sample import SAMPLE_MEETING
 from .meeting import run_meeting
 
 STATIC = Path(__file__).parent / "static"
@@ -334,6 +335,27 @@ def create_app(
             raise HTTPException(status_code=404, detail="Meeting not found.")
         db.set_share_token(user["id"], meeting_id, None)
         return {"ok": True}
+
+    @app.get("/api/sample")
+    def sample():
+        return SAMPLE_MEETING
+
+    @app.get("/api/account/export")
+    def export_account(user=Depends(current_user)):
+        data = {
+            "account": {
+                "email": user["email"], "name": user["name"], "plan": user["plan"],
+                "created_at": user["created_at"],
+            },
+            "meetings": [
+                db.get_meeting(user["id"], m["id"]) for m in db.list_meetings(user["id"], limit=100_000)
+            ],
+        }
+        return Response(
+            json.dumps(data, indent=2),
+            media_type="application/json",
+            headers={"Content-Disposition": 'attachment; filename="boardroom-export.json"'},
+        )
 
     @app.get("/api/shared/{token}")
     def shared(token: str):

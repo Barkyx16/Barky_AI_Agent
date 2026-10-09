@@ -673,3 +673,28 @@ def test_admin_stats_are_admin_only(tmp_path):
     assert stats["cost"]["avg_per_meeting_usd"] > 0
     assert len(stats["daily"]) == 14
     assert stats["daily"][-1]["meetings"] == 1 and stats["daily"][-1]["signups"] == 2
+
+
+def test_export_contains_all_my_data(tmp_path):
+    client = make_client(tmp_path)
+    signup(client)
+    events(client.post("/api/meetings", json={"question": "Export me", "context": "secret notes"}))
+    r = client.get("/api/account/export")
+    assert r.status_code == 200
+    assert "attachment" in r.headers["content-disposition"]
+    data = r.json()
+    assert data["account"]["email"] == "ada@example.com"
+    assert data["meetings"][0]["question"] == "Export me"
+    assert data["meetings"][0]["context"] == "secret notes"
+    assert len(data["meetings"][0]["steps"]) == 5
+    client.post("/api/logout")
+    assert client.get("/api/account/export").status_code == 401
+
+
+def test_sample_meeting_is_public_and_well_formed(tmp_path):
+    from boardroom.board import Verdict
+
+    client = make_client(tmp_path)
+    data = client.get("/api/sample").json()
+    Verdict.model_validate({**data["verdict"], "steps": data["steps"]})
+    assert {t["member"] for t in data["takes"]} == {"analyst", "skeptic", "strategist", "operator"}
