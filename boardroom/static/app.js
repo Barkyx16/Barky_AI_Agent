@@ -204,7 +204,18 @@ document.addEventListener("keydown", (e) => {
 
 /* ---------- landing / auth ---------------------------------------------- */
 
+function pendingRef() {
+  try {
+    const fromUrl = new URLSearchParams(location.search).get("ref");
+    if (fromUrl) sessionStorage.setItem("ref", fromUrl);
+    return sessionStorage.getItem("ref");
+  } catch (_) {
+    return new URLSearchParams(location.search).get("ref");
+  }
+}
+
 function renderLanding(tab = "signup") {
+  const ref = pendingRef();
   const seats = boardAdvisors().map((a) => `
     <div class="seat"><div class="avatar" data-c="${a.color}">${esc(a.initials)}</div>
       <div><strong>${esc(a.name)}</strong><span>${esc(a.role)}</span></div></div>`).join("");
@@ -223,6 +234,7 @@ function renderLanding(tab = "signup") {
         <div class="auth-card">
           <h2>${tab === "signup" ? "Take your seat" : "Welcome back"}</h2>
           <p class="sub">${tab === "signup" ? "Create a free account. It takes ten seconds." : "Sign in to see your meetings."}</p>
+          ${tab === "signup" && ref && !state.config.demo ? `<div class="notice invite">You were invited. You'll get <b>${Number(state.config.referral_bonus)} bonus meetings</b> when you sign up.</div>` : ""}
           <div class="tabs" role="tablist">
             <button role="tab" aria-selected="${tab === "signup"}" data-tab="signup">Create account</button>
             <button role="tab" aria-selected="${tab === "login"}" data-tab="login">Sign in</button>
@@ -248,6 +260,7 @@ function renderLanding(tab = "signup") {
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const fd = Object.fromEntries(new FormData(form));
+    if (tab === "signup" && ref) fd.ref = ref;
     const btn = form.querySelector("button[type=submit]");
     const errEl = document.getElementById("auth-error");
     errEl.textContent = "";
@@ -398,17 +411,20 @@ function renderAccount() {
   el.innerHTML = `
     <div class="account-row"><span class="who">${esc(state.user.name)}</span>
       <span class="badge">${u.plan === "pro" ? "Pro" : state.config.demo ? "Demo" : "Free"}</span></div>
-    ${limited ? `<div class="usage">${u.used_today} of ${u.daily_limit} meetings today<div class="usage-bar"><i data-w="${pct}"></i></div></div>` : ""}
+    ${limited ? `<div class="usage">${u.used_today} of ${u.daily_limit} meetings today${u.bonus_meetings ? ` · +${u.bonus_meetings} bonus` : ""}<div class="usage-bar"><i data-w="${pct}"></i></div></div>` : ""}
+    <div class="account-actions">
+      ${u.plan !== "pro" && !state.config.demo ? `<button class="btn btn-sm" id="upgrade">Upgrade to Pro</button>` : ""}
+      <button class="btn btn-sm" id="invite">${u.plan !== "pro" && !state.config.demo ? "Invite friends" : `Invite friends${state.config.demo ? "" : ` · +${Number(state.config.referral_bonus)}`}`}</button>
+    </div>
+    ${state.user.can_manage_billing ? `<button class="btn btn-ghost btn-sm btn-block" id="billing">Manage billing</button>` : ""}
     <div class="account-row">
-      ${u.plan !== "pro" && !state.config.demo
-        ? `<button class="btn btn-sm" id="upgrade">Upgrade to Pro</button>`
-        : state.user.can_manage_billing ? `<button class="btn btn-ghost btn-sm" id="billing">Manage billing</button>` : "<span></span>"}
-      <span><button class="btn btn-ghost btn-sm" id="settings" aria-label="Account settings">${ICON_GEAR}</button><button class="btn btn-ghost btn-sm" id="theme" aria-label="Toggle theme">${ICON_THEME}</button>
-      <button class="btn btn-ghost btn-sm" id="logout">Sign out</button></span>
+      <span><button class="btn btn-ghost btn-sm" id="settings" aria-label="Account settings" title="Account settings">${ICON_GEAR}</button><button class="btn btn-ghost btn-sm" id="theme" aria-label="Toggle theme" title="Toggle theme">${ICON_THEME}</button></span>
+      <button class="btn btn-ghost btn-sm" id="logout">Sign out</button>
     </div>`;
   applyStyles(el);
   document.getElementById("theme").addEventListener("click", toggleTheme);
   document.getElementById("settings").addEventListener("click", showSettings);
+  document.getElementById("invite").addEventListener("click", showInvite);
   document.getElementById("logout").addEventListener("click", async () => {
     await api("/api/logout", { method: "POST" });
     state.user = null; state.meetings = []; state.live = null; state.filter = "";
@@ -452,6 +468,29 @@ function showUpgrade() {
     }
   });
   (go || back.querySelector("#close-up")).focus();
+}
+
+async function showInvite() {
+  let info;
+  try { info = await api("/api/referral"); } catch (err) { toast(err.message); return; }
+  const link = `${location.origin}/?ref=${encodeURIComponent(info.code)}`;
+  const back = document.createElement("div");
+  back.className = "modal-back";
+  back.innerHTML = `
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="inv-title">
+      <h2 id="inv-title">Invite friends</h2>
+      <p class="fine left">Know someone facing a big decision? When they sign up with your link, you both get <b>${Number(info.bonus)} bonus meetings</b>${info.earned >= info.cap ? "" : ` (up to ${Number(info.cap)} for you in total)`}.</p>
+      <div class="row-gap"><input class="input" id="invite-link" readonly value="${esc(link)}"><button class="btn btn-primary" id="invite-copy">Copy</button></div>
+      <p class="fine left">${Number(info.invited)} ${info.invited === 1 ? "friend has" : "friends have"} joined · ${Number(info.earned)} bonus meetings earned</p>
+      <div class="actions"><button class="btn" id="invite-done">Done</button></div>
+    </div>`;
+  const close = openModal(back);
+  back.querySelector("#invite-done").addEventListener("click", close);
+  back.querySelector("#invite-copy").addEventListener("click", async () => {
+    const input = back.querySelector("#invite-link");
+    try { await navigator.clipboard.writeText(input.value); toast("Invite link copied"); } catch (_) { input.select(); }
+  });
+  back.querySelector("#invite-copy").focus();
 }
 
 function showSettings() {

@@ -27,6 +27,7 @@ Boardroom gives anyone a private board of AI advisors. You bring a decision ("Sh
 - **Plan tracking.** Check off steps; progress shows in the sidebar for every meeting.
 - **Follow-ups.** Reconvene the board on an earlier decision ("What if I wait six months?") with the earlier verdict as context.
 - **Sample meeting.** Visitors can read a full example meeting from the landing page before signing up.
+- **Referrals.** Every user has an invite link. When a friend signs up through it, both get bonus meetings (3 each by default), used after the daily free meetings run out. A cap per referrer limits farming.
 - **Shareable verdicts.** One click creates a public read-only link (`/s/<token>`, with a rich preview card showing the question and verdict in iMessage, WhatsApp, Slack and X) to the debate and verdict, with a sign-up call to action. Private background notes and progress are never shared.
 - **Accounts and plans.** Email sign-up, a free daily quota, and a Pro plan with unlimited meetings and deep debates.
 - **Demo mode.** Runs with scripted advisors when no API key is set, so anyone can try the full experience.
@@ -80,6 +81,7 @@ docker run -p 8000:8000 -e ANTHROPIC_API_KEY=sk-ant-... -v boardroom-data:/data 
 | `BOARDROOM_COMPANY_NAME` | `Boardroom` | Legal name shown in the Terms and Privacy Policy. |
 | `BOARDROOM_CONTACT_EMAIL` | `support@example.com` | Contact address in the legal pages. **Set this before launch.** |
 | `BOARDROOM_LEGAL_UPDATED` | `October 9, 2026` | "Last updated" date on the legal pages. |
+| `BOARDROOM_REFERRAL_BONUS` / `BOARDROOM_REFERRAL_CAP` | `3` / `30` | Bonus meetings per referral for each side, and the most one referrer can earn. |
 | `BOARDROOM_FREE_DAILY_ASKS` / `BOARDROOM_PRO_DAILY_ASKS` | `10` / `200` | Questions to individual advisors per day. |
 | `BOARDROOM_MAX_CONCURRENT` | `2` | Meetings one user can have in session at once. |
 | `BOARDROOM_PRO_DAILY_LIMIT` | `50` | Fair-use cap on Pro meetings per day, so one account can't run up a huge API bill. |

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import secrets
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -89,6 +90,15 @@ class Database:
             user_cols = {r["name"] for r in c.execute("PRAGMA table_info(users)")}
             if "stripe_customer_id" not in user_cols:
                 c.execute("ALTER TABLE users ADD COLUMN stripe_customer_id TEXT")
+            for col, kind in (
+                ("referral_code", "TEXT"), ("referred_by", "INTEGER"),
+                ("bonus_meetings", "INTEGER NOT NULL DEFAULT 0"), ("referral_bonus_earned", "INTEGER NOT NULL DEFAULT 0"),
+            ):
+                if col not in user_cols:
+                    c.execute(f"ALTER TABLE users ADD COLUMN {col} {kind}")
+            c.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS users_referral ON users(referral_code) WHERE referral_code IS NOT NULL"
+            )
             if "remind_emails" not in user_cols:
                 c.execute("ALTER TABLE users ADD COLUMN remind_emails INTEGER NOT NULL DEFAULT 1")
             cols = {r["name"] for r in c.execute("PRAGMA table_info(meetings)")}
@@ -145,6 +155,53 @@ class Database:
     def set_plan(self, email: str, plan: str) -> bool:
         with self.conn() as c:
             return c.execute("UPDATE users SET plan = ? WHERE email = ?", (plan, email)).rowcount > 0
+
+    def referral_code(self, user_id: int) -> str:
+        """The user's invite code, created on first use."""
+        with self.conn() as c:
+            row = c.execute("SELECT referral_code FROM users WHERE id = ?", (user_id,)).fetchone()
+            if row and row["referral_code"]:
+                return row["referral_code"]
+            while True:
+                code = secrets.token_urlsafe(6).replace("-", "x").replace("_", "y")
+                try:
+                    c.execute("UPDATE users SET referral_code = ? WHERE id = ?", (code, user_id))
+                    return code
+                except sqlite3.IntegrityError:
+                    continue
+
+    def apply_referral(self, new_user_id: int, code: str, bonus: int, cap: int) -> bool:
+        """Credit both sides of a referral. The referrer earns at most `cap` bonus meetings in total."""
+        with self.conn() as c:
+            ref = c.execute(
+                "SELECT id, referral_bonus_earned FROM users WHERE referral_code = ? AND id != ?",
+                (code, new_user_id),
+            ).fetchone()
+            if ref is None:
+                return False
+            c.execute(
+                "UPDATE users SET referred_by = ?, bonus_meetings = bonus_meetings + ? WHERE id = ?",
+                (ref["id"], bonus, new_user_id),
+            )
+            grant = max(0, min(bonus, cap - ref["referral_bonus_earned"]))
+            if grant:
+                c.execute(
+                    "UPDATE users SET bonus_meetings = bonus_meetings + ?, "
+                    "referral_bonus_earned = referral_bonus_earned + ? WHERE id = ?",
+                    (grant, grant, ref["id"]),
+                )
+            return True
+
+    def referral_count(self, user_id: int) -> int:
+        with self.conn() as c:
+            return int(c.execute("SELECT COUNT(*) FROM users WHERE referred_by = ?", (user_id,)).fetchone()[0])
+
+    def use_bonus_meeting(self, user_id: int) -> bool:
+        with self.conn() as c:
+            return c.execute(
+                "UPDATE users SET bonus_meetings = bonus_meetings - 1 WHERE id = ? AND bonus_meetings > 0",
+                (user_id,),
+            ).rowcount > 0
 
     def set_remind_emails(self, user_id: int, enabled: bool) -> None:
         with self.conn() as c:

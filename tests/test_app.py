@@ -154,7 +154,7 @@ def test_free_plan_limits(tmp_path):
     client = make_client(tmp_path, engine=PaidEngine(delay=0), demo_mode=False)
     signup(client)
     me = client.get("/api/me").json()
-    assert me["usage"] == {"plan": "free", "used_today": 0, "daily_limit": 2, "deep_mode": False}
+    assert me["usage"] == {"plan": "free", "used_today": 0, "daily_limit": 2, "deep_mode": False, "bonus_meetings": 0}
     assert client.post("/api/meetings", json={"question": "Deep one", "mode": "deep"}).status_code == 403
     for _ in range(2):
         assert client.post("/api/meetings", json={"question": "Question here"}).status_code == 200
@@ -984,3 +984,41 @@ def test_verdict_options_are_sorted_and_clamped(tmp_path):
     opts = next(e["verdict"]["options"] for e in evs if e["type"] == "verdict")
     assert [o["score"] for o in opts] == [100, 50, 35, 10]  # clamped, sorted, lowest dropped
     assert len(opts) == 4
+
+
+# ---- referrals --------------------------------------------------------------
+
+
+def test_referrals_grant_bonus_meetings(tmp_path):
+    client = make_client(tmp_path, engine=PaidEngine(delay=0), demo_mode=False, free_daily_limit=1, referral_bonus=2, referral_cap=3)
+    signup(client)  # ada, the referrer
+    info = client.get("/api/referral").json()
+    assert info["bonus"] == 2 and info["invited"] == 0
+    code = info["code"]
+    assert client.get("/api/referral").json()["code"] == code  # stable
+    client.post("/api/logout")
+
+    r = client.post("/api/signup", json={"email": "bo@example.com", "name": "Bo", "password": "password1", "ref": code})
+    assert r.json()["usage"]["bonus_meetings"] == 2
+    # Bo: 1 free + 2 bonus meetings today, then out. A rejected deep request doesn't spend a bonus.
+    assert client.post("/api/meetings", json={"question": "Free one"}).status_code == 200
+    assert client.post("/api/meetings", json={"question": "Deep", "mode": "deep"}).status_code == 403
+    assert client.get("/api/me").json()["usage"]["bonus_meetings"] == 2
+    for _ in range(2):
+        assert client.post("/api/meetings", json={"question": "Bonus one"}).status_code == 200
+    assert client.post("/api/meetings", json={"question": "Too many"}).status_code == 429
+    client.post("/api/logout")
+
+    # A second referral only tops Ada up to the cap of 3.
+    client.post("/api/signup", json={"email": "cy@example.com", "name": "Cy", "password": "password1", "ref": code})
+    client.post("/api/logout")
+    client.post("/api/login", json={"email": "ada@example.com", "password": "correct horse"})
+    info = client.get("/api/referral").json()
+    assert info["invited"] == 2 and info["earned"] == 3
+    assert client.get("/api/me").json()["usage"]["bonus_meetings"] == 3
+
+
+def test_bad_or_self_referral_codes_do_nothing(tmp_path):
+    client = make_client(tmp_path)
+    r = client.post("/api/signup", json={"email": "x@example.com", "name": "X", "password": "password1", "ref": "nope"})
+    assert r.status_code == 200 and r.json()["usage"]["bonus_meetings"] == 0

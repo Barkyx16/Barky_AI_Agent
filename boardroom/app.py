@@ -46,6 +46,7 @@ class SignupIn(BaseModel):
     email: str = Field(max_length=254)
     name: str = Field(min_length=1, max_length=60)
     password: str = Field(min_length=8, max_length=200)
+    ref: str | None = Field(default=None, max_length=40)
 
 
 class LoginIn(BaseModel):
@@ -228,6 +229,7 @@ def create_app(
             "used_today": db.meetings_today(user["id"]),
             "daily_limit": None if unlimited else settings.free_daily_limit,
             "deep_mode": unlimited,
+            "bonus_meetings": user["bonus_meetings"],
         }
 
     def user_out(user: sqlite3.Row) -> dict:
@@ -252,6 +254,7 @@ def create_app(
             "pro_price": settings.pro_price_label,
             "password_reset": mailer is not None,
             "reminders": mailer is not None,
+            "referral_bonus": settings.referral_bonus,
         }
 
     @app.post("/api/signup")
@@ -264,6 +267,8 @@ def create_app(
             user_id = db.create_user(email, body.name.strip(), auth.hash_password(body.password))
         except sqlite3.IntegrityError:
             raise HTTPException(status_code=409, detail="An account with that email already exists.")
+        if body.ref:
+            db.apply_referral(user_id, body.ref.strip(), settings.referral_bonus, settings.referral_cap)
         start_session(response, user_id)
         return user_out(db.user_by_id(user_id))
 
@@ -338,6 +343,16 @@ def create_app(
         db.set_password(user["id"], auth.hash_password(body.new_password))
         db.delete_other_sessions(user["id"], request.cookies.get(COOKIE, ""))
         return {"ok": True}
+
+    @app.get("/api/referral")
+    def referral(user=Depends(current_user)):
+        return {
+            "code": db.referral_code(user["id"]),
+            "bonus": settings.referral_bonus,
+            "invited": db.referral_count(user["id"]),
+            "earned": user["referral_bonus_earned"],
+            "cap": settings.referral_cap,
+        }
 
     @app.patch("/api/account/preferences")
     def preferences(body: PreferencesIn, user=Depends(current_user)):
@@ -501,7 +516,8 @@ def create_app(
     @app.post("/api/meetings")
     async def convene(body: MeetingIn, user=Depends(current_user)):
         quota = usage(user)
-        if quota["daily_limit"] is not None and quota["used_today"] >= quota["daily_limit"]:
+        needs_bonus = quota["daily_limit"] is not None and quota["used_today"] >= quota["daily_limit"]
+        if needs_bonus and quota["bonus_meetings"] <= 0:
             raise HTTPException(
                 status_code=429,
                 detail=f"You've used all {quota['daily_limit']} free meetings for today. "
@@ -524,6 +540,11 @@ def create_app(
         question = body.question.strip()
         context = body.context.strip()
         guest = body.guest.model_dump() if body.guest else None
+        if body.parent_id is not None and db.get_meeting(user["id"], body.parent_id) is None:
+            raise HTTPException(status_code=404, detail="Original meeting not found.")
+        # Spend a bonus meeting only once every other check has passed.
+        if needs_bonus and not db.use_bonus_meeting(user["id"]):
+            raise HTTPException(status_code=429, detail="You're out of meetings for today.")
         if guest:
             guest = {"name": " ".join(guest["name"].split()), "perspective": guest["perspective"].strip()}
         if body.parent_id is not None:
