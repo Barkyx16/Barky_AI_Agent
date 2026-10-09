@@ -866,3 +866,19 @@ def test_pro_fair_use_cap(tmp_path):
         assert client.post("/api/meetings", json={"question": "Pro question"}).status_code == 200
     r = client.post("/api/meetings", json={"question": "Third"})
     assert r.status_code == 429 and "fair-use" in r.json()["detail"]
+
+
+def test_installable_app_assets(tmp_path):
+    client = make_client(tmp_path)
+    page = client.get("/").text
+    assert 'rel="manifest"' in page and 'rel="apple-touch-icon"' in page
+    manifest = client.get("/static/manifest.webmanifest").json()
+    for icon in manifest["icons"]:
+        assert client.get(icon["src"]).status_code == 200
+
+
+def test_advisors_reply_in_the_users_language():
+    from boardroom.board import BOARD, CHAIR_SYSTEM, advisor_system
+
+    assert "language the person wrote" in CHAIR_SYSTEM
+    assert all("language the person wrote" in advisor_system(a) for a in BOARD)
