@@ -16,7 +16,23 @@ def main(argv: list[str] | None = None) -> int:
     plan = sub.add_parser("set-plan", help="set a user's plan")
     plan.add_argument("email")
     plan.add_argument("plan", choices=["free", "pro"])
+    backup = sub.add_parser("backup", help="write a consistent copy of the database")
+    backup.add_argument("dest", nargs="?", help="output path (default: data/backups/boardroom-<timestamp>.db)")
     args = parser.parse_args(argv)
+
+    if args.command == "backup":
+        from datetime import datetime, timezone
+        from pathlib import Path
+
+        from .config import Settings
+        from .db import Database
+
+        db_path = Settings.from_env().db_path
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        dest = args.dest or str(Path(db_path).parent / "backups" / f"boardroom-{stamp}.db")
+        Database(db_path).backup(dest)
+        print(f"Backed up {db_path} to {dest}")
+        return 0
 
     if args.command == "set-plan":
         from .config import Settings

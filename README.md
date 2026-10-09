@@ -118,6 +118,17 @@ browser ──POST /api/meetings──▶ FastAPI ──▶ meeting.run_meeting(
 - `boardroom/app.py`: API, auth (with login throttling), quotas, share links, and security headers.
 - `boardroom/static/`: the single-page front end, in plain HTML, CSS, and JS.
 
+## Backups
+
+All data lives in one SQLite file. Take a consistent copy at any time, even while the app is serving:
+
+```bash
+python -m boardroom backup                     # data/backups/boardroom-<timestamp>.db
+python -m boardroom backup /path/to/copy.db
+```
+
+Schedule it daily (cron, or your host's scheduled jobs) and store copies off the server.
+
 ## Legal pages
 
 `/terms` and `/privacy` are rendered from `boardroom/legal/terms.md` and `privacy.md`, with your company name and contact email filled in. They include a clear "not professional advice" disclaimer and crisis guidance. **They are starting templates, not legal advice. Have a lawyer review them for your jurisdiction before you charge customers.**
@@ -137,6 +148,8 @@ browser ──POST /api/meetings──▶ FastAPI ──▶ meeting.run_meeting(
 pip install -r requirements-dev.txt
 python -m pytest
 ```
+
+GitHub Actions runs the suite on every push and pull request (`.github/workflows/tests.yml`).
 
 ## Roadmap to revenue
 

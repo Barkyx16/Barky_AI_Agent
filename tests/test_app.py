@@ -894,3 +894,18 @@ def test_legal_pages(tmp_path):
     privacy = client.get("/privacy").text
     assert "<h1>Privacy Policy</h1>" in privacy and "<strong>We do not sell your personal information.</strong>" in privacy
     assert "{" not in privacy
+
+
+def test_backup_command(tmp_path, monkeypatch):
+    import sqlite3 as sq
+
+    from boardroom.__main__ import main
+
+    db_path = tmp_path / "live.db"
+    monkeypatch.setenv("BOARDROOM_DB_PATH", str(db_path))
+    client = make_client(tmp_path, db_path=str(db_path))
+    signup(client)
+    dest = tmp_path / "backups" / "copy.db"
+    assert main(["backup", str(dest)]) == 0
+    with sq.connect(dest) as c:
+        assert c.execute("SELECT email FROM users").fetchone()[0] == "ada@example.com"

@@ -302,6 +302,16 @@ class Database:
                 (status, meeting_id),
             )
 
+    def backup(self, dest: str) -> None:
+        """Copy the live database to `dest` using SQLite's online backup (safe while serving)."""
+        Path(dest).parent.mkdir(parents=True, exist_ok=True)
+        with self.conn() as src:
+            target = sqlite3.connect(dest)
+            try:
+                src.backup(target)
+            finally:
+                target.close()
+
     def interrupt_running(self) -> None:
         with self.conn() as c:
             c.execute("UPDATE meetings SET status = 'interrupted' WHERE status = 'running'")
