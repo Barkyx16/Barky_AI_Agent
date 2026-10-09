@@ -160,7 +160,8 @@ def create_app(
         }
 
     @app.post("/api/signup")
-    def signup(body: SignupIn, response: Response):
+    def signup(body: SignupIn, request: Request, response: Response):
+        throttle(f"signup:{request.client.host if request.client else '?'}", limit=10, window=3600)
         email = body.email.strip().lower()
         if not EMAIL_RE.match(email):
             raise HTTPException(status_code=422, detail="Please enter a valid email address.")

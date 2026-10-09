@@ -26,6 +26,7 @@ Boardroom gives anyone a private board of AI advisors. You bring a decision ("Sh
 - **Accounts and plans.** Email sign-up, a free daily quota, and a Pro plan with unlimited meetings and deep debates.
 - **Demo mode.** Runs with scripted advisors when no API key is set, so anyone can try the full experience.
 - **Polished UI.** Responsive from phone to desktop, light and dark themes, keyboard shortcuts (⌘/Ctrl+Enter), accessible markup, and no build step.
+- **Graceful failures.** If one advisor hits an error, they sit the round out and the meeting continues.
 - **Duty of care.** Every advisor follows safety rules for crisis situations and high-stakes medical, legal, or financial topics.
 
 ## Run it
@@ -60,6 +61,7 @@ docker run -p 8000:8000 -e ANTHROPIC_API_KEY=sk-ant-... -v boardroom-data:/data 
 | `BOARDROOM_PUBLIC_URL` | request URL | Your site's public URL, used for Stripe redirects. |
 | `BOARDROOM_PRO_PRICE_LABEL` | `$12/month` | Price text shown in the upgrade dialog. |
 | `HOST` / `PORT` | `127.0.0.1` / `8000` | Where the server listens. |
+| `FORWARDED_ALLOW_IPS` | `127.0.0.1` | Behind a reverse proxy or load balancer, set this to the proxy's IP (or `*`) so rate limits see real client IPs. |
 
 ### Getting paid
 

@@ -489,3 +489,47 @@ def test_stale_running_meetings_are_marked_interrupted(tmp_path):
     mid = db.create_meeting(uid, "Q?", "", "quick", None)
     make_client(tmp_path)  # a fresh server process starts
     assert db.get_meeting(uid, mid)["status"] == "interrupted"
+
+
+class FlakySkepticEngine(DemoEngine):
+    async def take(self, advisor, prompt):
+        if advisor.key == "skeptic":
+            raise EngineError("The AI service had a hiccup. Please try again.")
+            yield  # pragma: no cover - makes this an async generator
+        async for event in super().take(advisor, prompt):
+            yield event
+
+
+class AllDownEngine(DemoEngine):
+    async def take(self, advisor, prompt):
+        raise EngineError("Couldn't reach the AI service.")
+        yield  # pragma: no cover
+
+
+def test_one_advisor_failing_does_not_end_the_meeting(tmp_path):
+    client = make_client(tmp_path, engine=FlakySkepticEngine(delay=0))
+    signup(client)
+    evs = events(client.post("/api/meetings", json={"question": "Should I renovate?"}))
+    errors = [e for e in evs if e["type"] == "advisor_error"]
+    assert [e["advisor"] for e in errors] == ["skeptic"]
+    assert evs[-1]["type"] == "done"
+    m = client.get(f"/api/meetings/{evs[0]['id']}").json()
+    assert m["status"] == "done"
+    assert {t["member"] for t in m["takes"]} == {"analyst", "strategist", "operator"}
+
+
+def test_whole_board_failing_reports_an_error(tmp_path):
+    client = make_client(tmp_path, engine=AllDownEngine(delay=0))
+    signup(client)
+    evs = events(client.post("/api/meetings", json={"question": "Anyone there?"}))
+    assert evs[-1] == {"type": "error", "message": "Couldn't reach the AI service."}
+    assert client.get(f"/api/meetings/{evs[0]['id']}").json()["status"] == "failed"
+
+
+def test_signup_is_throttled(tmp_path):
+    client = make_client(tmp_path)
+    codes = [
+        client.post("/api/signup", json={"email": f"u{i}@example.com", "name": "U", "password": "password1"}).status_code
+        for i in range(11)
+    ]
+    assert codes[:10] == [200] * 10 and codes[10] == 429

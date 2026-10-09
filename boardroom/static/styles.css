@@ -249,6 +249,8 @@ button, input, textarea { font: inherit; color: inherit; }
 .state { margin-left: auto; font-size: 11.5px; color: var(--text-3); display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; }
 .state .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--c); animation: pulse 1.1s ease-in-out infinite; }
 .state.done .dot { animation: none; background: var(--ok); }
+.state.out .dot { animation: none; background: var(--text-3); }
+.body.muted { color: var(--text-3); font-size: 14px; font-style: italic; }
 @keyframes pulse { 50% { opacity: .25; } }
 .prose { font-size: 14.5px; color: var(--text); overflow-wrap: anywhere; }
 .prose ul, .prose ol { margin: 0 0 .75em; padding-left: 1.25em; }

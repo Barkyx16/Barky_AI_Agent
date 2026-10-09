@@ -166,11 +166,11 @@ def rebuttal_prompt(
     advisors: dict[str, Advisor],
 ) -> str:
     others = "\n\n".join(
-        f"{_speaker(advisors, k)}:\n{t}" for k, t in remarks.items() if k != advisor.key
+        f"{_speaker(advisors, k)}:\n{t}" for k, t in remarks.items() if k != advisor.key and t
     )
     return (
         brief(question, context, today)
-        + f"\n\nYour opening remarks were:\n{remarks.get(advisor.key, '')}"
+        + f"\n\nYour opening remarks were:\n{remarks.get(advisor.key) or '(you did not speak in the opening round)'}"
         + f"\n\nThe rest of the board said:\n\n{others}\n\n"
         + REBUTTAL_MARKER
         + " In around 80-120 words: name the point from another advisor you most agree "
@@ -215,7 +215,7 @@ def chair_prompt(
         parts.append(
             f"--- {label} ---\n"
             + "\n\n".join(
-                f"{_speaker(advisors, k)}:\n{t}" for k, t in remarks.items()
+                f"{_speaker(advisors, k)}:\n{t}" for k, t in remarks.items() if t
             )
         )
     parts.append("Make the call.")

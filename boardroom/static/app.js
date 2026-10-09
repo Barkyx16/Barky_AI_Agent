@@ -587,6 +587,11 @@ function handleEvent(live, ev) {
       r.done = true; r.status = "Done";
       break;
     }
+    case "advisor_error": {
+      const r = live.remarks[ev.advisor][ev.round];
+      r.done = true; r.status = "Sat out";
+      break;
+    }
     case "chair_start":
       live.chair = "deliberating";
       break;
@@ -670,15 +675,19 @@ function meetingLayout(m, rounds, cardsFor) {
 }
 
 function stateBadge(r) {
-  return `<span class="state ${r.done ? "done" : ""}"><span class="dot"></span>${esc(r.done ? "Done" : r.status)}</span>`;
+  const label = r.done ? (r.text ? "Done" : "Sat out") : r.status;
+  return `<span class="state ${r.done ? (r.text ? "done" : "out") : ""}"><span class="dot"></span>${esc(label)}</span>`;
 }
 
 function remarkBody(r) {
+  if (!r.text && r.done) return `<div class="body muted">Didn't speak this round.</div>`;
   if (!r.text) return `<div class="body skeleton" aria-hidden="true"><i></i><i></i><i></i></div>`;
   return `<div class="body prose ${r.done ? "" : "caret"}">${md(r.text)}</div>`;
 }
 
 function sourcesHtml(sources) {
+  sources = sources.filter((s) => /^https?:\/\//i.test(s.url));
+  if (!sources.length) return "";
   return `<div class="sources"><b>Sources</b>${sources.map((s) => {
     let host = s.url;
     try { host = new URL(s.url).hostname.replace(/^www\./, ""); } catch (_) { /* keep url */ }
@@ -844,7 +853,7 @@ async function loadMeeting(id) {
   m.shareable = m.status === "done";
   view.innerHTML = meetingLayout(m, rounds, (round) => seatsFor(m.guest).map((a) => {
     const t = byKey[`${a.key}-${round}`];
-    const r = t ? { text: t.text, done: true, status: "Done", sources: t.sources } : { text: "", done: false, status: stalled ? "No remarks" : "Thinking…", sources: [] };
+    const r = t ? { text: t.text, done: true, status: "Done", sources: t.sources } : { text: "", done: true, status: "Sat out", sources: [] };
     return remarkCard(a, r, round);
   }).join(""))
     + (m.verdict ? `<div class="section-title">The verdict</div>${verdictCard(m.verdict, m.steps, false, m.guest)}${followupBox()}` : "")

@@ -29,6 +29,7 @@ async def _run_round(
     results: dict[str, str],
 ) -> AsyncIterator[dict[str, Any]]:
     queue: asyncio.Queue = asyncio.Queue()
+    failures: list[EngineError] = []
 
     async def speak(advisor) -> None:
         parts: list[str] = []
@@ -47,6 +48,10 @@ async def _run_round(
             results[advisor.key] = text
             db.save_take(meeting_id, advisor.key, round_no, text, sources)
             await queue.put({"type": "advisor_done", "advisor": advisor.key, "round": round_no})
+        except EngineError as exc:
+            # One advisor failing shouldn't end the meeting; they sit this round out.
+            failures.append(exc)
+            await queue.put({"type": "advisor_error", "advisor": advisor.key, "round": round_no, "message": str(exc)})
         except Exception as exc:  # surfaced to the client by the round loop
             await queue.put(exc)
         finally:
@@ -63,6 +68,8 @@ async def _run_round(
                 raise item
             else:
                 yield item
+        if failures and len(failures) == len(board):
+            raise failures[0]
     finally:
         for t in tasks:
             t.cancel()
