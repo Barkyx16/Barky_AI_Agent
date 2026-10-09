@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import date
+from datetime import date, timedelta
 from typing import Any, AsyncIterator
 
 from .board import Advisor, chair_prompt, opening_prompt, rebuttal_prompt, seats
@@ -122,7 +122,9 @@ async def run_meeting(
         data = verdict.model_dump()
         data["confidence"] = max(0, min(100, int(data["confidence"])))
         data["votes"] = [v for v in data["votes"] if v["advisor"] in by_key]
-        db.finish_meeting(meeting_id, data)
+        data["review_in_days"] = max(1, min(365, int(data["review_in_days"])))
+        review_at = (date.today() + timedelta(days=data["review_in_days"])).isoformat()
+        db.finish_meeting(meeting_id, data, review_at)
         finished = True
         yield {"type": "verdict", "verdict": data}
         yield {"type": "done", "steps": db_meeting_steps(db, meeting_id)}

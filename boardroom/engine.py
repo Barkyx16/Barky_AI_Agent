@@ -260,6 +260,7 @@ class DemoEngine:
                     {"title": "Make the full call", "detail": "Review results against your stop-rule.", "when": "Day 30"},
                 ],
                 "review": "In 30 days, compare the test results with your definition of success.",
+                "review_in_days": 30,
             }
         )
 

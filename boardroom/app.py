@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -69,6 +70,10 @@ class ResetIn(BaseModel):
     password: str = Field(min_length=8, max_length=200)
 
 
+class PreferencesIn(BaseModel):
+    remind_emails: bool
+
+
 class DeleteAccountIn(BaseModel):
     password: str = Field(max_length=200)
 
@@ -108,14 +113,49 @@ def create_app(
     # Meetings left "running" by a previous process can't resume.
     db.interrupt_running()
 
+    def send_review_reminders() -> int:
+        """Email users whose decisions are due for review. Returns how many were sent."""
+        if mailer is None:
+            return 0
+        sent = 0
+        base = settings.public_url or "http://localhost:8000"
+        for due in db.due_reviews(datetime.now(timezone.utc).date().isoformat()):
+            try:
+                mailer.send(
+                    due["email"],
+                    f"Time to review: {due['question'][:80]}",
+                    f"Hi {due['name']},\n\nYour board asked to check back on this decision today:\n\n"
+                    f"  {due['question']}\n\nThe Chair's verdict was: {due['headline']}\n\n"
+                    f"See how it's going and reconvene the board here:\n{base}/#/m/{due['id']}\n\n"
+                    "You can turn these reminders off in your account settings.\n",
+                )
+            except Exception:
+                log.exception("failed to send review reminder for meeting %s", due["id"])
+                continue
+            db.mark_reminded(due["id"])
+            sent += 1
+        return sent
+
+    async def reminder_loop() -> None:
+        while True:
+            try:
+                await asyncio.to_thread(send_review_reminders)
+            except Exception:
+                log.exception("review reminder pass failed")
+            await asyncio.sleep(3600)
+
     @asynccontextmanager
     async def lifespan(_app):
+        task = asyncio.create_task(reminder_loop()) if mailer is not None else None
         yield
+        if task:
+            task.cancel()
         await hub.shutdown()
 
     app = FastAPI(title="Boardroom", docs_url=None, redoc_url=None, lifespan=lifespan)
     app.state.db = db
     app.state.hub = hub
+    app.state.send_review_reminders = send_review_reminders
     app.state.engine = engine
     login_attempts: dict[str, deque] = defaultdict(deque)
 
@@ -180,6 +220,7 @@ def create_app(
             "usage": usage(user),
             "can_manage_billing": billing is not None and bool(user["stripe_customer_id"]),
             "is_admin": user["email"] in settings.admin_emails,
+            "remind_emails": bool(user["remind_emails"]),
         }
 
     # ---- public -----------------------------------------------------------
@@ -193,6 +234,7 @@ def create_app(
             "billing": billing is not None,
             "pro_price": settings.pro_price_label,
             "password_reset": mailer is not None,
+            "reminders": mailer is not None,
         }
 
     @app.post("/api/signup")
@@ -278,6 +320,11 @@ def create_app(
             raise HTTPException(status_code=401, detail="Your current password is incorrect.")
         db.set_password(user["id"], auth.hash_password(body.new_password))
         db.delete_other_sessions(user["id"], request.cookies.get(COOKIE, ""))
+        return {"ok": True}
+
+    @app.patch("/api/account/preferences")
+    def preferences(body: PreferencesIn, user=Depends(current_user)):
+        db.set_remind_emails(user["id"], body.remind_emails)
         return {"ok": True}
 
     @app.delete("/api/account")

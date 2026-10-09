@@ -134,6 +134,7 @@ SAMPLE_MEETING = {
             {"title": "Decide with data", "detail": "Compare results against your walk-away numbers.", "when": "Month 6", "id": 0, "done": False},
         ],
         "review": "At month six, compare pop-up results with your walk-away numbers before resigning.",
+        "review_in_days": 180,
     },
 }
 SAMPLE_MEETING["steps"] = SAMPLE_MEETING["verdict"].pop("steps")

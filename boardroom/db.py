@@ -75,11 +75,17 @@ class Database:
             user_cols = {r["name"] for r in c.execute("PRAGMA table_info(users)")}
             if "stripe_customer_id" not in user_cols:
                 c.execute("ALTER TABLE users ADD COLUMN stripe_customer_id TEXT")
+            if "remind_emails" not in user_cols:
+                c.execute("ALTER TABLE users ADD COLUMN remind_emails INTEGER NOT NULL DEFAULT 1")
             cols = {r["name"] for r in c.execute("PRAGMA table_info(meetings)")}
             if "share_token" not in cols:
                 c.execute("ALTER TABLE meetings ADD COLUMN share_token TEXT")
             if "guest" not in cols:
                 c.execute("ALTER TABLE meetings ADD COLUMN guest TEXT")
+            if "review_at" not in cols:
+                c.execute("ALTER TABLE meetings ADD COLUMN review_at TEXT")
+            if "reminded" not in cols:
+                c.execute("ALTER TABLE meetings ADD COLUMN reminded INTEGER NOT NULL DEFAULT 0")
             for col, kind in (
                 ("input_tokens", "INTEGER"), ("output_tokens", "INTEGER"), ("cache_write_tokens", "INTEGER"),
                 ("cache_read_tokens", "INTEGER"), ("web_searches", "INTEGER"), ("cost_usd", "REAL"),
@@ -125,6 +131,31 @@ class Database:
     def set_plan(self, email: str, plan: str) -> bool:
         with self.conn() as c:
             return c.execute("UPDATE users SET plan = ? WHERE email = ?", (plan, email)).rowcount > 0
+
+    def set_remind_emails(self, user_id: int, enabled: bool) -> None:
+        with self.conn() as c:
+            c.execute("UPDATE users SET remind_emails = ? WHERE id = ?", (int(enabled), user_id))
+
+    def due_reviews(self, today: str) -> list[dict[str, Any]]:
+        with self.conn() as c:
+            rows = c.execute(
+                "SELECT m.id, m.question, m.verdict, u.email, u.name FROM meetings m "
+                "JOIN users u ON u.id = m.user_id "
+                "WHERE m.status = 'done' AND m.reminded = 0 AND m.review_at IS NOT NULL "
+                "AND m.review_at <= ? AND u.remind_emails = 1 ORDER BY m.id",
+                (today,),
+            ).fetchall()
+        return [
+            {
+                "id": r["id"], "question": r["question"], "email": r["email"], "name": r["name"],
+                "headline": (json.loads(r["verdict"]) or {}).get("headline", "") if r["verdict"] else "",
+            }
+            for r in rows
+        ]
+
+    def mark_reminded(self, meeting_id: int) -> None:
+        with self.conn() as c:
+            c.execute("UPDATE meetings SET reminded = 1 WHERE id = ?", (meeting_id,))
 
     def set_plan_by_id(self, user_id: int, plan: str, customer_id: str | None = None) -> bool:
         with self.conn() as c:
@@ -233,11 +264,11 @@ class Database:
                 (meeting_id, member, round_no, text, json.dumps(sources)),
             )
 
-    def finish_meeting(self, meeting_id: int, verdict: dict[str, Any]) -> None:
+    def finish_meeting(self, meeting_id: int, verdict: dict[str, Any], review_at: str | None = None) -> None:
         with self.conn() as c:
             c.execute(
-                "UPDATE meetings SET status = 'done', verdict = ? WHERE id = ?",
-                (json.dumps(verdict), meeting_id),
+                "UPDATE meetings SET status = 'done', verdict = ?, review_at = ? WHERE id = ?",
+                (json.dumps(verdict), review_at, meeting_id),
             )
             for i, step in enumerate(verdict.get("steps", [])):
                 c.execute(
@@ -272,7 +303,7 @@ class Database:
     def list_meetings(self, user_id: int, limit: int = 100) -> list[dict[str, Any]]:
         with self.conn() as c:
             rows = c.execute(
-                "SELECT c.id, c.question, c.status, c.created_at, c.verdict, c.parent_id, "
+                "SELECT c.id, c.question, c.status, c.created_at, c.verdict, c.parent_id, c.review_at, "
                 "(SELECT COUNT(*) FROM steps s WHERE s.meeting_id = c.id) AS total_steps, "
                 "(SELECT COUNT(*) FROM steps s WHERE s.meeting_id = c.id AND s.done) AS done_steps "
                 "FROM meetings c WHERE c.user_id = ? ORDER BY c.id DESC LIMIT ?",
@@ -289,6 +320,7 @@ class Database:
                     "created_at": r["created_at"],
                     "parent_id": r["parent_id"],
                     "headline": verdict.get("headline") if verdict else None,
+                    "review_at": r["review_at"],
                     "total_steps": r["total_steps"],
                     "done_steps": r["done_steps"],
                 }
@@ -321,6 +353,7 @@ class Database:
             "status": row["status"],
             "created_at": row["created_at"],
             "share_token": row["share_token"],
+            "review_at": row["review_at"],
             "guest": json.loads(row["guest"]) if row["guest"] else None,
             "verdict": json.loads(row["verdict"]) if row["verdict"] else None,
             "takes": [

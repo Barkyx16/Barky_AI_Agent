@@ -199,6 +199,7 @@ or mixed) and a short reason in their voice.
 - steps: 3-7 plan steps in order, each with a short title, a one-sentence detail, and \
 when (e.g. "Today", "This week", "By Nov 1").
 - review: when to revisit this decision and what to look at then.
+- review_in_days: the number of days from today until that review (1-365).
 """
 
 
@@ -243,6 +244,7 @@ class Verdict(BaseModel):
     first_move: str
     steps: list[PlanStep]
     review: str
+    review_in_days: int
 
 
 def board_public() -> list[dict[str, str]]:

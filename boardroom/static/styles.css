@@ -312,7 +312,12 @@ button, input, textarea { font: inherit; color: inherit; }
 .step.done .t { text-decoration: line-through; color: var(--text-3); }
 .step.done .d { color: var(--text-3); }
 .review { margin-top: 14px; font-size: 13.5px; color: var(--text-2); display: flex; gap: 8px; }
-.review b { color: var(--text); }
+.review b { color: var(--text); white-space: nowrap; }
+.review.is-due { align-items: center; flex-wrap: wrap; background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); padding: 10px 12px; border-radius: var(--radius-sm); }
+.review.is-due .btn { margin-left: auto; }
+.history .due { color: var(--accent); font-weight: 650; margin-left: auto; }
+.toggle { display: flex; gap: 10px; align-items: center; font-size: 14px; cursor: pointer; }
+.toggle input { width: 16px; height: 16px; accent-color: var(--accent); }
 
 .chair-wait { display: flex; gap: 14px; align-items: center; padding: 22px; }
 .chair-wait p { margin: 0; color: var(--text-2); }

@@ -92,6 +92,19 @@ function toast(msg) {
   toast.t = setTimeout(() => el.classList.remove("show"), 2600);
 }
 
+function todayIso() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function addDaysIso(days) {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+const isDue = (reviewAt) => !!reviewAt && reviewAt <= todayIso();
+
 function timeAgo(iso) {
   const s = (Date.now() - new Date(iso).getTime()) / 1000;
   if (s < 60) return "just now";
@@ -321,7 +334,7 @@ function renderHistory() {
   el.innerHTML = `<h4>Your meetings</h4>` + state.meetings.map((m) => {
     const pct = m.total_steps ? Math.round((100 * m.done_steps) / m.total_steps) : 0;
     const meta = m.status === "done"
-      ? `<span class="mini-bar"><i data-w="${pct}"></i></span><span>${m.done_steps}/${m.total_steps}</span>`
+      ? `<span class="mini-bar"><i data-w="${pct}"></i></span><span>${m.done_steps}/${m.total_steps}</span>${isDue(m.review_at) ? '<span class="due">Review due</span>' : ""}`
       : `<span>${m.status === "running" ? "In session" : "Unfinished"}</span>`;
     return `<a href="#/m/${m.id}" ${state.meetingId === m.id ? 'aria-current="page"' : ""}>
       <div class="q">${esc(m.headline || m.question)}</div>
@@ -410,6 +423,10 @@ function showSettings() {
         <p class="error-text" id="pw-error"></p>
         <button class="btn" type="submit">Update password</button>
       </form>
+      ${state.config.reminders ? `<div class="settings-block">
+        <h3>Reminders</h3>
+        <label class="toggle"><input type="checkbox" id="remind" ${state.user.remind_emails ? "checked" : ""}> Email me when it's time to review a decision</label>
+      </div>` : ""}
       <div class="settings-block">
         <h3>Your data</h3>
         <p class="fine left">Download every meeting, verdict and plan as a JSON file.</p>
@@ -430,6 +447,14 @@ function showSettings() {
   const close = () => back.remove();
   back.addEventListener("click", (e) => { if (e.target === back) close(); });
   back.querySelector("#set-close").addEventListener("click", close);
+  back.querySelector("#remind")?.addEventListener("change", async (e) => {
+    const on = e.target.checked;
+    try {
+      await api("/api/account/preferences", { method: "PATCH", body: { remind_emails: on } });
+      state.user.remind_emails = on;
+      toast(on ? "Review reminders on" : "Review reminders off");
+    } catch (err) { e.target.checked = !on; toast(err.message); }
+  });
   back.querySelector("#pw-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const err = back.querySelector("#pw-error");
@@ -848,7 +873,7 @@ function remarkCard(a, r, round) {
 
 function chairSection(m) {
   const chair = advisorsByKey().chair;
-  if (m.verdict) return `<div class="section-title">The verdict</div>` + verdictCard(m.verdict, m.steps, false, m.guest) + followupBox();
+  if (m.verdict) return `<div class="section-title">The verdict</div>` + verdictCard(m.verdict, m.steps, false, m.guest, addDaysIso(m.verdict.review_in_days || 30)) + followupBox();
   if (m.chair === "deliberating") {
     return `<div class="section-title">The verdict</div>
       <div class="card chair-wait"><div class="avatar" data-c="${chair.color}">${chair.initials}</div><p>The Chair is weighing the arguments…</p><div class="spinner"></div></div>`;
@@ -856,7 +881,7 @@ function chairSection(m) {
   return "";
 }
 
-function verdictCard(v, steps, readonly = false, guest = null) {
+function verdictCard(v, steps, readonly = false, guest = null, reviewAt = null) {
   const by = advisorsByKey(guest);
   const chair = by.chair;
   const done = steps.filter((s) => s.done).length;
@@ -887,7 +912,10 @@ function verdictCard(v, steps, readonly = false, guest = null) {
           <div><div class="t">${esc(s.title)}</div><div class="d">${esc(s.detail)}</div></div>
           ${s.when ? `<span class="w">${esc(s.when)}</span>` : ""}
         </label></li>`).join("")}</ul>
-      <div class="review"><b>Review:</b><span>${esc(v.review)}</span></div>
+      <div class="review ${!readonly && isDue(reviewAt) ? "is-due" : ""}">
+        <b>${reviewAt ? `Review ${isDue(reviewAt) ? "due" : "on"} ${esc(fmtDay(reviewAt))}:` : "Review:"}</b><span>${esc(v.review)}</span>
+        ${!readonly && isDue(reviewAt) ? `<button class="btn btn-primary btn-sm" data-act="review">Hold a review</button>` : ""}
+      </div>
     </div>
   </article>`;
 }
@@ -918,6 +946,13 @@ function bindMeetingActions(view, m) {
     } catch (err) { toast(err.message); }
   });
   view.querySelector('[data-act="share"]')?.addEventListener("click", (e) => showShare(m, e.currentTarget));
+  view.querySelector('[data-act="review"]')?.addEventListener("click", () => {
+    const input = view.querySelector("#fu");
+    if (!input) return;
+    input.value = "Review time. Here's what happened since our last meeting: ";
+    input.scrollIntoView({ behavior: "smooth", block: "center" });
+    input.focus();
+  });
   view.querySelector('[data-act="print"]')?.addEventListener("click", () => window.print());
   view.querySelector('[data-act="copy"]')?.addEventListener("click", async () => {
     if (!m.verdict) { toast("The verdict isn't in yet."); return; }
@@ -998,7 +1033,7 @@ async function loadMeeting(id) {
     const r = t ? { text: t.text, done: true, status: "Done", sources: t.sources } : { text: "", done: true, status: "Sat out", sources: [] };
     return remarkCard(a, r, round);
   }).join(""))
-    + (m.verdict ? `<div class="section-title">The verdict</div>${verdictCard(m.verdict, m.steps, false, m.guest)}${followupBox()}` : "")
+    + (m.verdict ? `<div class="section-title">The verdict</div>${verdictCard(m.verdict, m.steps, false, m.guest, m.review_at)}${followupBox()}` : "")
     + (stalled ? errorBox(m.status === "running" ? "This meeting is still in session. Refresh in a moment to see the result." : "This meeting didn't finish.") : "");
   applyStyles(view);
   bindMeetingActions(view, m);

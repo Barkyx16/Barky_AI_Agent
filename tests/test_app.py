@@ -698,3 +698,42 @@ def test_sample_meeting_is_public_and_well_formed(tmp_path):
     data = client.get("/api/sample").json()
     Verdict.model_validate({**data["verdict"], "steps": data["steps"]})
     assert {t["member"] for t in data["takes"]} == {"analyst", "skeptic", "strategist", "operator"}
+
+
+# ---- review dates & reminders ----------------------------------------------
+
+
+def test_verdict_sets_a_review_date_and_reminders_send_once(tmp_path):
+    from datetime import date, timedelta
+
+    client, mailer = reset_client(tmp_path)
+    signup(client)
+    meeting_id = events(client.post("/api/meetings", json={"question": "Should I learn Spanish?"}))[0]["id"]
+    m = client.get(f"/api/meetings/{meeting_id}").json()
+    assert m["verdict"]["review_in_days"] == 30
+    assert m["review_at"] == (date.today() + timedelta(days=30)).isoformat()
+    assert client.get("/api/meetings").json()[0]["review_at"] == m["review_at"]
+
+    send = client.app.state.send_review_reminders
+    assert send() == 0  # not due yet
+    with client.app.state.db.conn() as c:
+        c.execute("UPDATE meetings SET review_at = ?", ((date.today() - timedelta(days=1)).isoformat(),))
+    assert send() == 1
+    to, subject, body = mailer.sent[-1]
+    assert to == "ada@example.com" and "Spanish" in subject and f"/#/m/{meeting_id}" in body
+    assert send() == 0  # only once
+
+
+def test_reminders_respect_opt_out(tmp_path):
+    from datetime import date
+
+    client, mailer = reset_client(tmp_path)
+    signup(client)
+    assert client.get("/api/me").json()["remind_emails"] is True
+    events(client.post("/api/meetings", json={"question": "Opt out test"}))
+    assert client.patch("/api/account/preferences", json={"remind_emails": False}).status_code == 200
+    assert client.get("/api/me").json()["remind_emails"] is False
+    with client.app.state.db.conn() as c:
+        c.execute("UPDATE meetings SET review_at = ?", (date.today().isoformat(),))
+    assert client.app.state.send_review_reminders() == 0
+    assert mailer.sent == []
