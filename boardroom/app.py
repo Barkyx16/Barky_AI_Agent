@@ -20,7 +20,7 @@ from typing import Literal
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from . import auth
 from .billing import Billing, BillingError, verify_signature
@@ -87,12 +87,26 @@ class MeetingIn(BaseModel):
     mode: Literal["quick", "deep"] = "quick"
     parent_id: int | None = None
     guest: GuestIn | None = None
-    focus: Literal["", "money", "career", "business", "relationships", "health"] = ""
+    focus: str = ""
+
+    @field_validator("focus")
+    @classmethod
+    def known_focus(cls, v: str) -> str:
+        if v and v not in FOCUS_AREAS:
+            raise ValueError("unknown focus area")
+        return v
 
 
 class AskIn(BaseModel):
-    advisor: Literal["analyst", "skeptic", "strategist", "operator", "guest"]
+    advisor: str
     question: str = Field(min_length=3, max_length=1000)
+
+    @field_validator("advisor")
+    @classmethod
+    def known_advisor(cls, v: str) -> str:
+        if v not in BOARD_BY_KEY and v != "guest":
+            raise ValueError("unknown advisor")
+        return v
 
 
 class OutcomeIn(BaseModel):
@@ -124,6 +138,7 @@ def create_app(
     if billing is None and settings.billing_enabled:
         billing = Billing(settings.stripe_secret_key, settings.stripe_price_id, settings.stripe_webhook_secret)
     db = Database(settings.db_path)
+    db.referral_cap = settings.referral_cap
     engine = engine or make_engine(settings)
     demo = engine.name == "demo"
 
@@ -275,7 +290,7 @@ def create_app(
         except sqlite3.IntegrityError:
             raise HTTPException(status_code=409, detail="An account with that email already exists.")
         if body.ref:
-            db.apply_referral(user_id, body.ref.strip(), settings.referral_bonus, settings.referral_cap)
+            db.apply_referral(user_id, body.ref.strip(), settings.referral_bonus)
         start_session(response, user_id)
         return user_out(db.user_by_id(user_id))
 
@@ -575,8 +590,10 @@ def create_app(
             guest = guest or parent["guest"]
             focus = focus or parent["focus"]
 
-        meeting_id = await asyncio.to_thread(
-            db.create_meeting, user["id"], question, context, body.mode, body.parent_id, guest, focus
+        # Deliberately synchronous: no await between the quota checks above and this insert,
+        # so parallel requests can't both pass the check.
+        meeting_id = db.create_meeting(
+            user["id"], question, context, body.mode, body.parent_id, guest, focus, needs_bonus
         )
         guest_advisor = make_guest(guest["name"], guest["perspective"]) if guest else None
 
@@ -603,14 +620,14 @@ def create_app(
             advisor = make_guest(m["guest"]["name"], m["guest"]["perspective"])
         else:
             advisor = BOARD_BY_KEY[body.advisor]
-        if not demo:
-            limit = settings.pro_daily_asks if user["plan"] == "pro" else settings.free_daily_asks
-            if await asyncio.to_thread(db.asks_today, user["id"]) >= limit:
-                raise HTTPException(
-                    status_code=429,
-                    detail=f"You've asked {limit} questions today. "
-                    + ("Upgrade to Pro for more." if user["plan"] != "pro" else "The limit resets at midnight UTC."),
-                )
+        limit = None if demo else (settings.pro_daily_asks if user["plan"] == "pro" else settings.free_daily_asks)
+        # Counted before streaming, so leaving early or asking in parallel can't dodge the limit.
+        if not await asyncio.to_thread(db.try_log_ask, user["id"], meeting_id, limit):
+            raise HTTPException(
+                status_code=429,
+                detail=f"You've asked {limit} questions today. "
+                + ("Upgrade to Pro for more." if user["plan"] != "pro" else "The limit resets at midnight UTC."),
+            )
         prompt = ask_prompt(
             advisor,
             m["question"],

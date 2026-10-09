@@ -126,6 +126,7 @@ async def run_meeting(
         ))
         try:
             shown: dict[str, str] = {}
+            settled = False  # both fields complete: stop re-parsing the growing JSON
             while not chair.done() or not drafts.empty():
                 getter = asyncio.ensure_future(drafts.get())
                 done, _ = await asyncio.wait({chair, getter}, return_when=asyncio.FIRST_COMPLETED)
@@ -135,7 +136,10 @@ async def run_meeting(
                 text = getter.result()
                 while not drafts.empty():  # skip ahead to the newest draft
                     text = drafts.get_nowait()
+                if settled:
+                    continue
                 draft = {k: partial_field(text, k) for k in ("headline", "verdict")}
+                settled = bool(_COMPLETE_VERDICT.search(text))
                 if draft != shown and any(draft.values()):
                     shown = draft
                     yield {"type": "chair_draft", **draft}
@@ -175,6 +179,7 @@ async def run_meeting(
 
 
 _FIELD_RE = {}
+_COMPLETE_VERDICT = re.compile(r'"verdict"\s*:\s*"(?:[^"\\]|\\.)*"')
 
 
 def partial_field(text: str, field: str) -> str:
@@ -185,13 +190,12 @@ def partial_field(text: str, field: str) -> str:
     match = pattern.search(text)
     if not match:
         return ""
-    raw = match.group(1)
-    if raw.endswith("\\") and not raw.endswith("\\\\"):
-        raw = raw[:-1]  # an escape sequence cut in half
+    # Drop a \uXXXX escape that's only partly streamed so far.
+    raw = re.sub(r"\\u[0-9a-fA-F]{0,3}$", "", match.group(1))
     try:
         return json.loads(f'"{raw}"')
     except ValueError:
-        return raw.replace('\\"', '"')
+        return ""
 
 
 def db_meeting_steps(db: Database, meeting_id: int) -> list[dict[str, Any]]:

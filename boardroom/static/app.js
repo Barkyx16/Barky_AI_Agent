@@ -711,7 +711,8 @@ function renderComposer(prefill) {
   const mic = document.getElementById("mic");
   if (mic) {
     let rec = null;
-    const stop = () => { if (rec) rec.stop(); };
+    const stop = () => { if (rec) { rec.onresult = null; rec.stop(); } };
+    document.getElementById("composer").addEventListener("submit", stop);
     mic.addEventListener("click", () => {
       if (rec) { stop(); return; }
       rec = new SpeechRec();
@@ -1039,6 +1040,7 @@ async function askAdvisor(m, key, question, card) {
   thread.insertAdjacentHTML("beforeend", askBubble(question, "", true));
   const bubble = thread.lastElementChild.querySelector(".a");
   let text = "";
+  let ok = false;
   try {
     const res = await fetch(`/api/meetings/${m.id}/ask`, {
       method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin",
@@ -1068,6 +1070,7 @@ async function askAdvisor(m, key, question, card) {
         if (ev.type === "delta") { text += ev.text; bubble.innerHTML = md(text); }
         else if (ev.type === "error") { bubble.innerHTML = `<span class="muted">${esc(ev.message)}</span>`; }
         else if (ev.type === "done") {
+          ok = true;
           (m.asks = m.asks || []).push({ advisor: key, question, answer: ev.answer });
         }
       }
@@ -1076,7 +1079,8 @@ async function askAdvisor(m, key, question, card) {
     bubble.innerHTML = `<span class="muted">The connection dropped. Please try again.</span>`;
   }
   bubble.classList.remove("caret");
-  return true;
+  if (!ok && !text) bubble.closest(".qa").classList.add("failed");
+  return ok;  // keep the typed question in the box when it didn't go through
 }
 
 function chairSection(m) {

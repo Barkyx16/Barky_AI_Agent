@@ -1000,17 +1000,22 @@ def test_referrals_grant_bonus_meetings(tmp_path):
 
     r = client.post("/api/signup", json={"email": "bo@example.com", "name": "Bo", "password": "password1", "ref": code})
     assert r.json()["usage"]["bonus_meetings"] == 2
+    db = client.app.state.db
+    assert db.user_by_email("ada@example.com")["bonus_meetings"] == 0  # paid only after Bo's first real meeting
     # Bo: 1 free + 2 bonus meetings today, then out. A rejected deep request doesn't spend a bonus.
     assert client.post("/api/meetings", json={"question": "Free one"}).status_code == 200
+    assert db.user_by_email("ada@example.com")["bonus_meetings"] == 2
     assert client.post("/api/meetings", json={"question": "Deep", "mode": "deep"}).status_code == 403
     assert client.get("/api/me").json()["usage"]["bonus_meetings"] == 2
     for _ in range(2):
         assert client.post("/api/meetings", json={"question": "Bonus one"}).status_code == 200
     assert client.post("/api/meetings", json={"question": "Too many"}).status_code == 429
+    assert db.user_by_email("ada@example.com")["bonus_meetings"] == 2  # still one payout per referral
     client.post("/api/logout")
 
     # A second referral only tops Ada up to the cap of 3.
     client.post("/api/signup", json={"email": "cy@example.com", "name": "Cy", "password": "password1", "ref": code})
+    assert client.post("/api/meetings", json={"question": "Cy's first"}).status_code == 200
     client.post("/api/logout")
     client.post("/api/login", json={"email": "ada@example.com", "password": "correct horse"})
     info = client.get("/api/referral").json()
@@ -1119,3 +1124,85 @@ def test_no_focus_by_default(tmp_path):
     signup(client)
     events(client.post("/api/meetings", json={"question": "General question"}))
     assert not any("board. " in p and "asked for a" in p for p in engine.prompts)
+
+
+# ---- regressions from the second review --------------------------------------
+
+
+def test_deleting_meetings_does_not_restore_quota(tmp_path):
+    client = make_client(tmp_path, engine=PaidEngine(delay=0), demo_mode=False, free_daily_limit=1, free_daily_asks=1)
+    signup(client)
+    meeting_id = events(client.post("/api/meetings", json={"question": "Only one today"}))[0]["id"]
+    events(client.post(f"/api/meetings/{meeting_id}/ask", json={"advisor": "skeptic", "question": "Worst case?"}))
+    assert client.delete(f"/api/meetings/{meeting_id}").status_code == 200
+    assert client.get("/api/me").json()["usage"]["used_today"] == 1
+    assert client.post("/api/meetings", json={"question": "Sneaky second"}).status_code == 429
+
+
+def test_failed_bonus_meeting_is_refunded(tmp_path):
+    class PaidBroken(BrokenEngine):
+        name = "claude"
+
+    client = make_client(tmp_path, engine=PaidBroken(delay=0), demo_mode=False, free_daily_limit=0)
+    signup(client)
+    client.app.state.db.conn  # noqa: B018
+    with client.app.state.db.conn() as c:
+        c.execute("UPDATE users SET bonus_meetings = 1")
+    evs = events(client.post("/api/meetings", json={"question": "Will fail"}))
+    assert evs[-1]["type"] == "error"
+    assert client.get("/api/me").json()["usage"]["bonus_meetings"] == 1
+
+
+def test_interrupted_meetings_refund_quota_on_restart(tmp_path):
+    from boardroom.db import Database
+
+    db = Database(str(tmp_path / "test.db"))
+    uid = db.create_user("x@example.com", "X", "h")
+    db.create_meeting(uid, "Q?", "", "quick", None)
+    assert db.meetings_today(uid) == 1
+    make_client(tmp_path)  # restart marks it interrupted
+    assert db.meetings_today(uid) == 0
+
+
+def test_question_limit_is_atomic_and_counted_up_front(tmp_path):
+    from boardroom.db import Database
+
+    db = Database(str(tmp_path / "q.db"))
+    uid = db.create_user("x@example.com", "X", "h")
+    assert db.try_log_ask(uid, 1, 2) and db.try_log_ask(uid, 1, 2)
+    assert not db.try_log_ask(uid, 1, 2)
+    assert db.try_log_ask(uid, 1, None)  # demo: unlimited, still logged
+
+    class PaidFlaky(FlakySkepticEngine):
+        name = "claude"
+
+    client = make_client(tmp_path, engine=PaidFlaky(delay=0), demo_mode=False, free_daily_asks=1)
+    signup(client)
+    meeting_id = events(client.post("/api/meetings", json={"question": "Ask the flaky skeptic"}))[0]["id"]
+    evs = events(client.post(f"/api/meetings/{meeting_id}/ask", json={"advisor": "skeptic", "question": "Hello?"}))
+    assert evs[-1]["type"] == "error"
+    # The failed call still used the day's question, and it isn't shown in the thread.
+    assert client.post(f"/api/meetings/{meeting_id}/ask", json={"advisor": "operator", "question": "Again?"}).status_code == 429
+    assert client.get(f"/api/meetings/{meeting_id}").json()["asks"] == []
+
+
+def test_partial_unicode_escape_is_hidden():
+    from boardroom.meeting import partial_field
+
+    assert partial_field('{"verdict": "Don\\u2019t quit \\u20', "verdict") == "Don\u2019t quit "
+
+
+def test_backup_does_not_touch_the_live_database(tmp_path, monkeypatch):
+    import sqlite3 as sq
+
+    from boardroom.__main__ import main
+
+    live = tmp_path / "live.db"
+    with sq.connect(live) as c:
+        c.execute("CREATE TABLE sessions (token TEXT, user_id INTEGER, expires_at TEXT)")
+        c.execute("INSERT INTO sessions VALUES ('short-old-token', 1, '2999-01-01')")
+    monkeypatch.setenv("BOARDROOM_DB_PATH", str(live))
+    assert main(["backup", str(tmp_path / "b.db")]) == 0
+    with sq.connect(live) as c:
+        assert c.execute("SELECT COUNT(*) FROM sessions").fetchone()[0] == 1  # no migrations ran
+        assert [r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")] == ["sessions"]

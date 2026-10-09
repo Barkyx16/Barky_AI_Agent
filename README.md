@@ -29,7 +29,7 @@ Boardroom gives anyone a private board of AI advisors. You bring a decision ("Sh
 - **Plan tracking.** Check off steps; progress shows in the sidebar for every meeting.
 - **Follow-ups.** Reconvene the board on an earlier decision ("What if I wait six months?") with the earlier verdict as context.
 - **Sample meeting.** Visitors can read a full example meeting from the landing page before signing up.
-- **Referrals.** Every user has an invite link. When a friend signs up through it, both get bonus meetings (3 each by default), used after the daily free meetings run out. A cap per referrer limits farming.
+- **Referrals.** Every user has an invite link. The friend gets bonus meetings when they sign up, and the referrer gets theirs once the friend finishes a real meeting (3 each by default). Bonus meetings are used after the daily free meetings run out, and a cap per referrer limits farming.
 - **Shareable verdicts.** One click creates a public read-only link (`/s/<token>`, with a rich preview card showing the question and verdict in iMessage, WhatsApp, Slack and X) to the debate and verdict, with a sign-up call to action. Private background notes and progress are never shared.
 - **Accounts and plans.** Email sign-up, a free daily quota, and a Pro plan with unlimited meetings and deep debates.
 - **Demo mode.** Runs with scripted advisors when no API key is set, so anyone can try the full experience.
@@ -147,7 +147,7 @@ Schedule it daily (cron, or your host's scheduled jobs) and store copies off the
 - Login, sign-up and password-reset requests are rate-limited, and login takes the same time whether or not the email exists.
 - Users can only see and change their own meetings. Shared pages strip private background notes and progress.
 - The Stripe webhook verifies signatures and grants Pro only for paid checkouts.
-- Spending guards: free daily quota, a Pro fair-use cap, and a limit on concurrent meetings per user.
+- Spending guards: free daily quota, a Pro fair-use cap, and a limit on concurrent meetings per user. Usage is recorded in a separate ledger, so deleting meetings doesn't restore quota. Limits are checked atomically, so parallel requests can't slip past them, and failed meetings refund their quota.
 
 ## Tests
 

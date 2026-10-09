@@ -24,13 +24,24 @@ def main(argv: list[str] | None = None) -> int:
         from datetime import datetime, timezone
         from pathlib import Path
 
+        import sqlite3
+
         from .config import Settings
-        from .db import Database
 
         db_path = Settings.from_env().db_path
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
         dest = args.dest or str(Path(db_path).parent / "backups" / f"boardroom-{stamp}.db")
-        Database(db_path).backup(dest)
+        if not Path(db_path).is_file():
+            print(f"No database at {db_path}", file=sys.stderr)
+            return 1
+        # A raw connection: opening it via Database() would run migrations on the live file.
+        Path(dest).parent.mkdir(parents=True, exist_ok=True)
+        src, target = sqlite3.connect(db_path), sqlite3.connect(dest)
+        try:
+            src.backup(target)
+        finally:
+            src.close()
+            target.close()
         print(f"Backed up {db_path} to {dest}")
         return 0
 

@@ -25,6 +25,15 @@ CREATE TABLE IF NOT EXISTS sessions (
     user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     expires_at  TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS quota_log (
+    id          INTEGER PRIMARY KEY,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    kind        TEXT NOT NULL,
+    meeting_id  INTEGER,
+    bonus       INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS quota_log_user ON quota_log(user_id, kind, created_at);
 CREATE TABLE IF NOT EXISTS password_resets (
     token_hash  TEXT PRIMARY KEY,
     user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -81,6 +90,9 @@ def now_iso() -> str:
 
 
 class Database:
+    # The most bonus meetings one referrer can earn; the app sets this from its settings.
+    referral_cap = 30
+
     def __init__(self, path: str):
         self.path = path
         if path != ":memory:":
@@ -93,6 +105,7 @@ class Database:
             for col, kind in (
                 ("referral_code", "TEXT"), ("referred_by", "INTEGER"),
                 ("bonus_meetings", "INTEGER NOT NULL DEFAULT 0"), ("referral_bonus_earned", "INTEGER NOT NULL DEFAULT 0"),
+                ("referral_reward_pending", "INTEGER NOT NULL DEFAULT 0"),
             ):
                 if col not in user_cols:
                     c.execute(f"ALTER TABLE users ADD COLUMN {col} {kind}")
@@ -175,26 +188,19 @@ class Database:
                 except sqlite3.IntegrityError:
                     continue
 
-    def apply_referral(self, new_user_id: int, code: str, bonus: int, cap: int) -> bool:
-        """Credit both sides of a referral. The referrer earns at most `cap` bonus meetings in total."""
+    def apply_referral(self, new_user_id: int, code: str, bonus: int) -> bool:
+        """Give the invited person their bonus now; the referrer's is paid when they finish a meeting."""
         with self.conn() as c:
             ref = c.execute(
-                "SELECT id, referral_bonus_earned FROM users WHERE referral_code = ? AND id != ?",
-                (code, new_user_id),
+                "SELECT id FROM users WHERE referral_code = ? AND id != ?", (code, new_user_id)
             ).fetchone()
             if ref is None:
                 return False
             c.execute(
-                "UPDATE users SET referred_by = ?, bonus_meetings = bonus_meetings + ? WHERE id = ?",
-                (ref["id"], bonus, new_user_id),
+                "UPDATE users SET referred_by = ?, bonus_meetings = bonus_meetings + ?, "
+                "referral_reward_pending = ? WHERE id = ?",
+                (ref["id"], bonus, bonus, new_user_id),
             )
-            grant = max(0, min(bonus, cap - ref["referral_bonus_earned"]))
-            if grant:
-                c.execute(
-                    "UPDATE users SET bonus_meetings = bonus_meetings + ?, "
-                    "referral_bonus_earned = referral_bonus_earned + ? WHERE id = ?",
-                    (grant, grant, ref["id"]),
-                )
             return True
 
     def referral_count(self, user_id: int) -> int:
@@ -312,6 +318,7 @@ class Database:
         parent_id: int | None,
         guest: dict[str, str] | None = None,
         focus: str = "",
+        bonus: bool = False,
     ) -> int:
         with self.conn() as c:
             cur = c.execute(
@@ -319,14 +326,20 @@ class Database:
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (user_id, parent_id, question, context, mode, json.dumps(guest) if guest else None, focus, now_iso()),
             )
-            return int(cur.lastrowid)
+            meeting_id = int(cur.lastrowid)
+            # Quota is tracked in its own ledger so deleting a meeting doesn't give it back.
+            c.execute(
+                "INSERT INTO quota_log (user_id, kind, meeting_id, bonus, created_at) VALUES (?, 'meeting', ?, ?, ?)",
+                (user_id, meeting_id, int(bonus), now_iso()),
+            )
+            return meeting_id
 
     def meetings_today(self, user_id: int) -> int:
         day = datetime.now(timezone.utc).date().isoformat()
         with self.conn() as c:
             row = c.execute(
-                "SELECT COUNT(*) FROM meetings WHERE user_id = ? AND created_at >= ? "
-                "AND status IN ('running', 'done')",
+                "SELECT COUNT(*) FROM quota_log WHERE user_id = ? AND kind = 'meeting' AND bonus = 0 "
+                "AND created_at >= ?",
                 (user_id, day),
             ).fetchone()
             return int(row[0])
@@ -347,6 +360,21 @@ class Database:
                 "UPDATE meetings SET status = 'done', verdict = ?, review_at = ? WHERE id = ?",
                 (json.dumps(verdict), review_at, meeting_id),
             )
+            # A referral pays the referrer once the invited person finishes a real meeting.
+            ref = c.execute(
+                "SELECT u.id, u.referred_by, u.referral_reward_pending FROM meetings m "
+                "JOIN users u ON u.id = m.user_id WHERE m.id = ?",
+                (meeting_id,),
+            ).fetchone()
+            if ref and ref["referred_by"] and ref["referral_reward_pending"] > 0:
+                bonus, cap = ref["referral_reward_pending"], self.referral_cap
+                c.execute(
+                    "UPDATE users SET bonus_meetings = bonus_meetings + MIN(?, ? - referral_bonus_earned), "
+                    "referral_bonus_earned = referral_bonus_earned + MIN(?, ? - referral_bonus_earned) "
+                    "WHERE id = ? AND referral_bonus_earned < ?",
+                    (bonus, cap, bonus, cap, ref["referred_by"], cap),
+                )
+                c.execute("UPDATE users SET referral_reward_pending = 0 WHERE id = ?", (ref["id"],))
             for i, step in enumerate(verdict.get("steps", [])):
                 c.execute(
                     "INSERT INTO steps (meeting_id, position, title, detail, timing) "
@@ -369,12 +397,29 @@ class Database:
                 (meeting_id, advisor, question, answer, now_iso()),
             )
 
+    def try_log_ask(self, user_id: int, meeting_id: int, limit: int | None) -> bool:
+        """Atomically check today's question count against `limit` and record one more."""
+        day = datetime.now(timezone.utc).date().isoformat()
+        with self.conn() as c:
+            c.execute("BEGIN IMMEDIATE")
+            if limit is not None:
+                used = c.execute(
+                    "SELECT COUNT(*) FROM quota_log WHERE user_id = ? AND kind = 'ask' AND created_at >= ?",
+                    (user_id, day),
+                ).fetchone()[0]
+                if used >= limit:
+                    return False
+            c.execute(
+                "INSERT INTO quota_log (user_id, kind, meeting_id, created_at) VALUES (?, 'ask', ?, ?)",
+                (user_id, meeting_id, now_iso()),
+            )
+            return True
+
     def asks_today(self, user_id: int) -> int:
         day = datetime.now(timezone.utc).date().isoformat()
         with self.conn() as c:
             return int(c.execute(
-                "SELECT COUNT(*) FROM asks a JOIN meetings m ON m.id = a.meeting_id "
-                "WHERE m.user_id = ? AND a.created_at >= ?",
+                "SELECT COUNT(*) FROM quota_log WHERE user_id = ? AND kind = 'ask' AND created_at >= ?",
                 (user_id, day),
             ).fetchone()[0])
 
@@ -405,24 +450,30 @@ class Database:
 
     def fail_meeting(self, meeting_id: int, status: str = "failed") -> None:
         with self.conn() as c:
-            c.execute(
+            changed = c.execute(
                 "UPDATE meetings SET status = ? WHERE id = ? AND status = 'running'",
                 (status, meeting_id),
-            )
+            ).rowcount
+            if changed:
+                self._refund(c, meeting_id)
 
-    def backup(self, dest: str) -> None:
-        """Copy the live database to `dest` using SQLite's online backup (safe while serving)."""
-        Path(dest).parent.mkdir(parents=True, exist_ok=True)
-        with self.conn() as src:
-            target = sqlite3.connect(dest)
-            try:
-                src.backup(target)
-            finally:
-                target.close()
+    @staticmethod
+    def _refund(c: sqlite3.Connection, meeting_id: int) -> None:
+        """A meeting that didn't finish gives back its quota, including a spent bonus meeting."""
+        row = c.execute(
+            "SELECT id, user_id, bonus FROM quota_log WHERE kind = 'meeting' AND meeting_id = ?", (meeting_id,)
+        ).fetchone()
+        if row is None:
+            return
+        c.execute("DELETE FROM quota_log WHERE id = ?", (row["id"],))
+        if row["bonus"]:
+            c.execute("UPDATE users SET bonus_meetings = bonus_meetings + 1 WHERE id = ?", (row["user_id"],))
 
     def interrupt_running(self) -> None:
         with self.conn() as c:
-            c.execute("UPDATE meetings SET status = 'interrupted' WHERE status = 'running'")
+            for row in c.execute("SELECT id FROM meetings WHERE status = 'running'").fetchall():
+                c.execute("UPDATE meetings SET status = 'interrupted' WHERE id = ?", (row["id"],))
+                self._refund(c, row["id"])
 
     def list_meetings(self, user_id: int, limit: int = 100) -> list[dict[str, Any]]:
         with self.conn() as c:
@@ -470,7 +521,7 @@ class Database:
                 (meeting_id,),
             ).fetchall()
             asks = c.execute(
-                "SELECT advisor, question, answer, created_at FROM asks WHERE meeting_id = ? ORDER BY id",
+                "SELECT advisor, question, answer, created_at FROM asks WHERE meeting_id = ? AND answer != '' ORDER BY id",
                 (meeting_id,),
             ).fetchall()
         return {
