@@ -11,6 +11,8 @@ from collections import defaultdict, deque
 from pathlib import Path
 from typing import Literal
 
+from contextlib import asynccontextmanager
+
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -22,6 +24,7 @@ from .board import GUEST_COLOR, board_public, make_guest
 from .config import Settings
 from .db import Database
 from .engine import Engine, make_engine
+from .hub import MeetingHub
 from .meeting import run_meeting
 
 STATIC = Path(__file__).parent / "static"
@@ -67,8 +70,18 @@ def create_app(
     engine = engine or make_engine(settings)
     demo = engine.name == "demo"
 
-    app = FastAPI(title="Boardroom", docs_url=None, redoc_url=None)
+    hub = MeetingHub()
+    # Meetings left "running" by a previous process can't resume.
+    db.interrupt_running()
+
+    @asynccontextmanager
+    async def lifespan(_app):
+        yield
+        await hub.shutdown()
+
+    app = FastAPI(title="Boardroom", docs_url=None, redoc_url=None, lifespan=lifespan)
     app.state.db = db
+    app.state.hub = hub
     app.state.engine = engine
     login_attempts: dict[str, deque] = defaultdict(deque)
 
@@ -288,7 +301,7 @@ def create_app(
         return {"ok": True}
 
     @app.post("/api/meetings")
-    def convene(body: MeetingIn, user=Depends(current_user)):
+    async def convene(body: MeetingIn, user=Depends(current_user)):
         quota = usage(user)
         if quota["daily_limit"] is not None and quota["used_today"] >= quota["daily_limit"]:
             raise HTTPException(
@@ -320,16 +333,20 @@ def create_app(
         meeting_id = db.create_meeting(user["id"], question, context, body.mode, body.parent_id, guest)
         guest_advisor = make_guest(guest["name"], guest["perspective"]) if guest else None
 
-        async def stream():
-            yield _sse({"type": "meeting", "id": meeting_id, "mode": body.mode, "guest": guest_public(guest_advisor)})
+        async def events():
+            yield {"type": "meeting", "id": meeting_id, "mode": body.mode, "guest": guest_public(guest_advisor)}
             async for event in run_meeting(engine, db, meeting_id, question, context, body.mode, guest_advisor):
-                yield _sse(event)
+                yield event
 
-        return StreamingResponse(
-            stream(),
-            media_type="text/event-stream",
-            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-        )
+        run = hub.start(meeting_id, user["id"], events())
+        return _event_stream(run)
+
+    @app.get("/api/meetings/{meeting_id}/events")
+    def follow_meeting(meeting_id: int, user=Depends(current_user)):
+        run = hub.get(meeting_id, user["id"])
+        if run is None:
+            raise HTTPException(status_code=404, detail="This meeting isn't in session.")
+        return _event_stream(run)
 
     # ---- UI -----------------------------------------------------------------
 
@@ -356,6 +373,18 @@ def guest_public(advisor) -> dict | None:
     if advisor is None:
         return None
     return {"key": "guest", "name": advisor.name, "role": advisor.role, "initials": advisor.initials, "color": GUEST_COLOR}
+
+
+def _event_stream(run) -> StreamingResponse:
+    async def stream():
+        async for event in run.follow():
+            yield _sse(event)
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 def _sse(event: dict) -> str:

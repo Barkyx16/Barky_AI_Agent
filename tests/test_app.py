@@ -1,3 +1,4 @@
+import asyncio
 import json
 from types import SimpleNamespace
 
@@ -431,3 +432,60 @@ def test_billing_disabled_without_keys(tmp_path):
     signup(client)
     assert client.get("/api/config").json()["billing"] is False
     assert client.post("/api/billing/checkout").status_code == 404
+
+
+# ---- resilient meetings ---------------------------------------------------
+
+
+def test_reattach_replays_the_meeting(tmp_path):
+    client = make_client(tmp_path)
+    signup(client)
+    first = events(client.post("/api/meetings", json={"question": "Replay me"}))
+    meeting_id = first[0]["id"]
+    replay = events(client.get(f"/api/meetings/{meeting_id}/events"))
+    assert replay == first
+    client.post("/api/logout")
+    signup(client, email="eve@example.com")
+    assert client.get(f"/api/meetings/{meeting_id}/events").status_code == 404
+
+
+@pytest.mark.anyio
+async def test_meeting_keeps_running_when_viewer_leaves():
+    from boardroom.hub import MeetingHub
+
+    async def slow():
+        for i in range(5):
+            await asyncio.sleep(0.01)
+            yield {"type": "tick", "i": i}
+
+    hub = MeetingHub()
+    run = hub.start(1, user_id=7, events=slow())
+    async for event in run.follow():
+        break  # viewer disconnects after the first event
+    await run.task
+    assert [e["i"] for e in run.events] == [0, 1, 2, 3, 4]
+    assert run.finished
+    assert hub.get(1, user_id=8) is None
+    late = [e async for e in hub.get(1, user_id=7).follow()]
+    assert len(late) == 5
+
+
+def test_failed_meetings_do_not_use_quota(tmp_path):
+    class PaidBroken(BrokenEngine):
+        name = "claude"
+
+    client = make_client(tmp_path, engine=PaidBroken(delay=0), demo_mode=False)
+    signup(client)
+    for _ in range(3):
+        events(client.post("/api/meetings", json={"question": "Will this fail?"}))
+    assert client.get("/api/me").json()["usage"]["used_today"] == 0
+
+
+def test_stale_running_meetings_are_marked_interrupted(tmp_path):
+    from boardroom.db import Database
+
+    db = Database(str(tmp_path / "test.db"))
+    uid = db.create_user("x@example.com", "X", "h")
+    mid = db.create_meeting(uid, "Q?", "", "quick", None)
+    make_client(tmp_path)  # a fresh server process starts
+    assert db.get_meeting(uid, mid)["status"] == "interrupted"

@@ -529,6 +529,11 @@ async function convene(body) {
   state.guest = { name: "", perspective: "" };
   const live = newLive(body);
   state.live = live;
+  await follow(res, live);
+}
+
+/* Read a server-sent event stream into a live meeting. */
+async function follow(res, live) {
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -549,7 +554,7 @@ async function convene(body) {
     if (!live.verdict) live.error = "The connection dropped before the meeting finished.";
   }
   live.running = false;
-  if (!live.verdict && !live.error) live.error = "The meeting ended early. Please try again.";
+  if (!live.verdict && !live.error) live.error = "Connection lost. The meeting continues on the server — refresh to catch up.";
   if (state.live === live && state.meetingId === live.id) renderLive();
   refreshSidebar();
 }
@@ -830,6 +835,7 @@ async function loadMeeting(id) {
     return;
   }
   if (state.meetingId !== id) return;
+  if (m.status === "running" && await attach(m)) return;
   const rounds = [...new Set(m.takes.map((t) => t.round))].sort();
   if (!rounds.length) rounds.push(1);
   const byKey = {};
@@ -842,7 +848,7 @@ async function loadMeeting(id) {
     return remarkCard(a, r, round);
   }).join(""))
     + (m.verdict ? `<div class="section-title">The verdict</div>${verdictCard(m.verdict, m.steps, false, m.guest)}${followupBox()}` : "")
-    + (stalled ? errorBox(m.status === "running" ? "This meeting is still in session in another tab." : "This meeting didn't finish.") : "");
+    + (stalled ? errorBox(m.status === "running" ? "This meeting is still in session. Refresh in a moment to see the result." : "This meeting didn't finish.") : "");
   applyStyles(view);
   bindMeetingActions(view, m);
 }
@@ -887,6 +893,21 @@ function showShare(m, button) {
     (back.querySelector("#share-copy") || back.querySelector("#share-create")).focus();
   };
   paint();
+}
+
+/* Re-join a meeting that's still in session (after a refresh or from another tab). */
+async function attach(m) {
+  let res;
+  try {
+    res = await fetch(`/api/meetings/${m.id}/events`, { credentials: "same-origin" });
+  } catch (_) { return false; }
+  if (!res.ok || state.meetingId !== m.id) return false;
+  const live = newLive({ question: m.question, context: m.context, mode: m.mode });
+  live.id = m.id;
+  state.live = live;
+  renderLive();
+  await follow(res, live);
+  return true;
 }
 
 /* ---------- public shared view ------------------------------------------ */

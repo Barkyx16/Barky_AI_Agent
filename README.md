@@ -19,6 +19,7 @@ Boardroom gives anyone a private board of AI advisors. You bring a decision ("Sh
 - **Guest advisors.** Seat anyone at the table with a name and perspective, or pick a preset. They debate alongside the board and get a vote, and follow-ups keep the same guest.
 - **Deep debate mode (Pro).** Adds a rebuttal round where advisors challenge each other before the Chair rules.
 - **Verdict card.** Headline, confidence ring, each advisor's vote, risks, first move, and an action plan.
+- **Never lose a meeting.** Meetings run on the server independently of the browser. Refresh, lose your connection or open a second tab, and the page catches up live.
 - **Plan tracking.** Check off steps; progress shows in the sidebar for every meeting.
 - **Follow-ups.** Reconvene the board on an earlier decision ("What if I wait six months?") with the earlier verdict as context.
 - **Shareable verdicts.** One click creates a public read-only link to the debate and verdict, with a sign-up call to action. Private background notes and progress are never shared.
@@ -87,6 +88,7 @@ browser ──POST /api/meetings──▶ FastAPI ──▶ meeting.run_meeting(
 - `boardroom/board.py`: advisor personas, prompts, and the verdict schema.
 - `boardroom/engine.py`: the Claude engine (streaming, adaptive thinking, web search, server-side refusal fallbacks) and the demo engine.
 - `boardroom/meeting.py`: runs the rounds and merges advisor streams into one event feed.
+- `boardroom/hub.py`: runs each meeting as a background task with a replayable event log, so viewers can attach and detach freely.
 - `boardroom/billing.py`: Stripe Checkout, customer portal, and webhook signature checks.
 - `boardroom/app.py`: API, auth (with login throttling), quotas, share links, and security headers.
 - `boardroom/static/`: the single-page front end, in plain HTML, CSS, and JS.

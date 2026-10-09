@@ -172,7 +172,8 @@ class Database:
         day = datetime.now(timezone.utc).date().isoformat()
         with self.conn() as c:
             row = c.execute(
-                "SELECT COUNT(*) FROM meetings WHERE user_id = ? AND created_at >= ?",
+                "SELECT COUNT(*) FROM meetings WHERE user_id = ? AND created_at >= ? "
+                "AND status IN ('running', 'done')",
                 (user_id, day),
             ).fetchone()
             return int(row[0])
@@ -206,6 +207,10 @@ class Database:
                 "UPDATE meetings SET status = ? WHERE id = ? AND status = 'running'",
                 (status, meeting_id),
             )
+
+    def interrupt_running(self) -> None:
+        with self.conn() as c:
+            c.execute("UPDATE meetings SET status = 'interrupted' WHERE status = 'running'")
 
     def list_meetings(self, user_id: int, limit: int = 100) -> list[dict[str, Any]]:
         with self.conn() as c:
