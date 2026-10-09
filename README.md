@@ -32,6 +32,7 @@ Boardroom gives anyone a private board of AI advisors. You bring a decision ("Sh
 - **Shareable verdicts.** One click creates a public read-only link (`/s/<token>`, with a rich preview card showing the question and verdict in iMessage, WhatsApp, Slack and X) to the debate and verdict, with a sign-up call to action. Private background notes and progress are never shared.
 - **Accounts and plans.** Email sign-up, a free daily quota, and a Pro plan with unlimited meetings and deep debates.
 - **Demo mode.** Runs with scripted advisors when no API key is set, so anyone can try the full experience.
+- **Voice input.** Tap the mic to speak your question (browsers with built-in speech recognition, such as Chrome, Edge and Safari).
 - **Any language.** Advisors and the Chair reply in the language the question was written in.
 - **Installable.** Add Boardroom to a phone's home screen and it opens like a native app (web app manifest and icons).
 - **Polished UI.** Responsive from phone to desktop, light and dark themes, keyboard shortcuts (⌘/Ctrl+Enter), accessible markup, and no build step.

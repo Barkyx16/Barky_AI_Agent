@@ -165,6 +165,8 @@ function toggleTheme() {
 
 const ICON_THEME = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>`;
 const ICON_GEAR = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>`;
+const ICON_MIC = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>`;
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition || null;
 const ICON_MENU = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>`;
 const ICON_PLUS = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>`;
 
@@ -674,7 +676,10 @@ function renderComposer(prefill) {
           </div>
           <div class="mode-hint" id="mode-hint"></div>
         </div>
-        <button class="btn btn-primary" type="submit" id="convene">Convene the board <span class="kbd">⌘↵</span></button>
+        <div class="submit-row">
+          ${SpeechRec ? `<button class="btn btn-ghost mic" type="button" id="mic" aria-pressed="false" aria-label="Speak your question" title="Speak your question">${ICON_MIC}</button>` : ""}
+          <button class="btn btn-primary" type="submit" id="convene">Convene the board <span class="kbd">⌘↵</span></button>
+        </div>
       </div>
       <p class="error-text" id="composer-error"></p>
     </form>
@@ -694,6 +699,37 @@ function renderComposer(prefill) {
   q.focus();
   q.setSelectionRange(q.value.length, q.value.length);
   q.addEventListener("input", () => { state.draft.question = q.value; });
+  const mic = document.getElementById("mic");
+  if (mic) {
+    let rec = null;
+    const stop = () => { if (rec) rec.stop(); };
+    mic.addEventListener("click", () => {
+      if (rec) { stop(); return; }
+      rec = new SpeechRec();
+      rec.interimResults = true;
+      rec.continuous = true;
+      rec.lang = navigator.language || "en-US";
+      const base = q.value ? `${q.value.trimEnd()} ` : "";
+      rec.onresult = (e) => {
+        let text = "";
+        for (let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript;
+        q.value = base + text.trim();
+        state.draft.question = q.value;
+      };
+      rec.onerror = (e) => {
+        if (e.error === "not-allowed" || e.error === "service-not-allowed") toast("Microphone access was blocked. Allow it in your browser to speak your question.");
+        else if (e.error !== "aborted" && e.error !== "no-speech") toast("Voice input stopped. Please try again.");
+      };
+      rec.onend = () => { rec = null; mic.setAttribute("aria-pressed", "false"); mic.classList.remove("listening"); q.focus(); };
+      try {
+        rec.start();
+        mic.setAttribute("aria-pressed", "true");
+        mic.classList.add("listening");
+        toast("Listening… tap the mic again when you're done.");
+      } catch (_) { rec = null; }
+    });
+    window.addEventListener("hashchange", stop, { once: true });
+  }
   ctx.addEventListener("input", () => { state.draft.context = ctx.value; });
   view.querySelectorAll("[data-mode]").forEach((b) => b.addEventListener("click", () => {
     if (b.dataset.mode === "deep" && !deepOk) { showUpgrade(); return; }
