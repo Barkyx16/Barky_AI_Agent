@@ -12,6 +12,7 @@ const state = {
   mode: "quick",
   draft: { question: "", context: "" },
   guest: { name: "", perspective: "" },
+  filter: "",
 };
 
 const EXAMPLES = [
@@ -172,6 +173,9 @@ const ICON_PLUS = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" s
 /* Shows a dialog: Escape closes it, Tab stays inside, focus returns to the opener. */
 function openModal(back) {
   const opener = document.activeElement;
+  const close = () => back.remove();
+  back.closeModal = close;
+  back.addEventListener("click", (e) => { if (e.target === back) close(); });
   document.body.appendChild(back);
   const watcher = new MutationObserver(() => {
     if (!back.isConnected) {
@@ -180,13 +184,14 @@ function openModal(back) {
     }
   });
   watcher.observe(document.body, { childList: true });
+  return close;
 }
 
 document.addEventListener("keydown", (e) => {
   const backs = document.querySelectorAll(".modal-back");
   const top = backs[backs.length - 1];
   if (!top) return;
-  if (e.key === "Escape") { e.preventDefault(); top.remove(); return; }
+  if (e.key === "Escape") { e.preventDefault(); top.closeModal(); return; }
   if (e.key !== "Tab") return;
   const items = [...top.querySelectorAll("button, a[href], input, summary, textarea, [tabindex]:not([tabindex='-1'])")]
     .filter((el) => !el.disabled && el.offsetParent !== null);
@@ -404,14 +409,15 @@ function renderAccount() {
   document.getElementById("settings").addEventListener("click", showSettings);
   document.getElementById("logout").addEventListener("click", async () => {
     await api("/api/logout", { method: "POST" });
-    state.user = null; state.meetings = []; state.live = null;
+    state.user = null; state.meetings = []; state.live = null; state.filter = "";
     location.hash = "";
     renderLanding("login");
   });
   document.getElementById("upgrade")?.addEventListener("click", showUpgrade);
   document.getElementById("billing")?.addEventListener("click", async (e) => {
-    e.currentTarget.disabled = true;
-    try { location.href = (await api("/api/billing/portal", { method: "POST" })).url; } catch (err) { toast(err.message); e.currentTarget.disabled = false; }
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    try { location.href = (await api("/api/billing/portal", { method: "POST" })).url; } catch (err) { toast(err.message); btn.disabled = false; }
   });
 }
 
@@ -430,9 +436,7 @@ function showUpgrade() {
         : `<p class="fine">Pro upgrades are handled by the site owner. Contact them to upgrade your account.</p>
            <div class="actions"><button class="btn btn-primary" id="close-up">Got it</button></div>`}
     </div>`;
-  openModal(back);
-  const close = () => back.remove();
-  back.addEventListener("click", (e) => { if (e.target === back) close(); });
+  const close = openModal(back);
   back.querySelector("#close-up").addEventListener("click", close);
   const go = back.querySelector("#go-pro");
   go?.addEventListener("click", async () => {
@@ -482,9 +486,7 @@ function showSettings() {
       </details>
       <div class="actions"><button class="btn btn-ghost" id="set-close">Close</button></div>
     </div>`;
-  openModal(back);
-  const close = () => back.remove();
-  back.addEventListener("click", (e) => { if (e.target === back) close(); });
+  const close = openModal(back);
   back.querySelector("#set-close").addEventListener("click", close);
   back.querySelector("#remind")?.addEventListener("change", async (e) => {
     const on = e.target.checked;
@@ -511,7 +513,7 @@ function showSettings() {
     try {
       await api("/api/account", { method: "DELETE", body: { password: back.querySelector("#del-pw").value } });
       close();
-      state.user = null; state.meetings = []; state.live = null;
+      state.user = null; state.meetings = []; state.live = null; state.filter = "";
       location.hash = "";
       renderLanding("signup");
       toast("Your account has been deleted.");
@@ -1081,9 +1083,7 @@ async function loadMeeting(id) {
 function showShare(m, button) {
   const back = document.createElement("div");
   back.className = "modal-back";
-  openModal(back);
-  const close = () => back.remove();
-  back.addEventListener("click", (e) => { if (e.target === back) close(); });
+  const close = openModal(back);
   const linkFor = (token) => `${location.origin}/s/${token}`;
   const paint = () => {
     back.innerHTML = m.share_token ? `

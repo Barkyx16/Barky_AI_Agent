@@ -71,6 +71,17 @@ class MeetingHub:
         run = self.runs.get(meeting_id)
         return run if run and run.user_id == user_id else None
 
+    async def cancel(self, meeting_id: int, user_id: int) -> None:
+        run = self.get(meeting_id, user_id)
+        if run and run.task and not run.task.done():
+            run.task.cancel()
+            await asyncio.gather(run.task, return_exceptions=True)
+
+    async def cancel_user(self, user_id: int) -> None:
+        for mid, run in list(self.runs.items()):
+            if run.user_id == user_id:
+                await self.cancel(mid, user_id)
+
     def _prune(self) -> None:
         now = time.monotonic()
         for mid in [m for m, r in self.runs.items() if r.finished and now - r.finished_at > KEEP_FINISHED_SECONDS]:

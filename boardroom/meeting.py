@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, AsyncIterator
 
 from .board import Advisor, chair_prompt, opening_prompt, rebuttal_prompt, seats
@@ -50,7 +50,7 @@ async def _run_round(
                     await queue.put({"type": "sources", "advisor": advisor.key, "round": round_no, "sources": sources})
             text = "".join(parts).strip()
             results[advisor.key] = text
-            db.save_take(meeting_id, advisor.key, round_no, text, sources)
+            await asyncio.to_thread(db.save_take, meeting_id, advisor.key, round_no, text, sources)
             await queue.put({"type": "advisor_done", "advisor": advisor.key, "round": round_no})
         except EngineError as exc:
             # One advisor failing shouldn't end the meeting; they sit this round out.
@@ -123,11 +123,12 @@ async def run_meeting(
         data["confidence"] = max(0, min(100, int(data["confidence"])))
         data["votes"] = [v for v in data["votes"] if v["advisor"] in by_key]
         data["review_in_days"] = max(1, min(365, int(data["review_in_days"])))
-        review_at = (date.today() + timedelta(days=data["review_in_days"])).isoformat()
-        db.finish_meeting(meeting_id, data, review_at)
+        today_utc = datetime.now(timezone.utc).date()
+        review_at = (today_utc + timedelta(days=data["review_in_days"])).isoformat()
+        await asyncio.to_thread(db.finish_meeting, meeting_id, data, review_at)
         finished = True
         yield {"type": "verdict", "verdict": data}
-        yield {"type": "done", "steps": db_meeting_steps(db, meeting_id)}
+        yield {"type": "done", "steps": await asyncio.to_thread(db_meeting_steps, db, meeting_id)}
     except EngineError as exc:
         db.fail_meeting(meeting_id)
         finished = True

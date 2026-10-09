@@ -119,12 +119,15 @@ def create_app(
         if mailer is None:
             return 0
         sent = 0
-        base = settings.public_url or "http://localhost:8000"
+        base = settings.public_url or app.state.seen_base_url
+        if not base:
+            log.warning("skipping review reminders: set BOARDROOM_PUBLIC_URL so emails can link to the app")
+            return 0
         for due in db.due_reviews(datetime.now(timezone.utc).date().isoformat()):
             try:
                 mailer.send(
                     due["email"],
-                    f"Time to review: {due['question'][:80]}",
+                    f"Time to review: {' '.join(due['question'].split())[:80]}",
                     f"Hi {due['name']},\n\nYour board asked to check back on this decision today:\n\n"
                     f"  {due['question']}\n\nThe Chair's verdict was: {due['headline']}\n\n"
                     f"See how it's going and reconvene the board here:\n{base}/#/m/{due['id']}\n\n"
@@ -157,12 +160,17 @@ def create_app(
     app.state.db = db
     app.state.hub = hub
     app.state.send_review_reminders = send_review_reminders
+    app.state.seen_base_url = ""
     app.state.engine = engine
     login_attempts: dict[str, deque] = defaultdict(deque)
 
     def throttle(key: str, limit: int = 8, window: float = 300.0) -> None:
         """Slow down password guessing: at most `limit` attempts per key per window."""
         now = time.monotonic()
+        if len(login_attempts) > 10_000:
+            # Forget keys with no attempts in the last hour so memory stays bounded.
+            for k in [k for k, q in login_attempts.items() if not q or now - q[-1] > 3600]:
+                del login_attempts[k]
         attempts = login_attempts[key]
         while attempts and now - attempts[0] > window:
             attempts.popleft()
@@ -174,6 +182,8 @@ def create_app(
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
+        if not app.state.seen_base_url:
+            app.state.seen_base_url = str(request.base_url).rstrip("/")
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
@@ -329,10 +339,11 @@ def create_app(
         return {"ok": True}
 
     @app.delete("/api/account")
-    def delete_account(body: DeleteAccountIn, response: Response, user=Depends(current_user)):
+    async def delete_account(body: DeleteAccountIn, response: Response, user=Depends(current_user)):
         throttle(f"pw:{user['id']}")
         if not auth.verify_password(body.password, user["pw_hash"]):
             raise HTTPException(status_code=401, detail="Password is incorrect.")
+        await hub.cancel_user(user["id"])
         db.delete_user(user["id"])
         response.delete_cookie(COOKIE)
         return {"ok": True}
@@ -361,7 +372,8 @@ def create_app(
         return with_guest_card(found)
 
     @app.delete("/api/meetings/{meeting_id}")
-    def delete_meeting(meeting_id: int, user=Depends(current_user)):
+    async def delete_meeting(meeting_id: int, user=Depends(current_user)):
+        await hub.cancel(meeting_id, user["id"])
         if not db.delete_meeting(user["id"], meeting_id):
             raise HTTPException(status_code=404, detail="Meeting not found.")
         return {"ok": True}
@@ -453,7 +465,14 @@ def create_app(
         event = json.loads(payload)
         obj = event.get("data", {}).get("object", {})
         kind = event.get("type")
-        if kind == "checkout.session.completed" and obj.get("client_reference_id"):
+        paid = obj.get("payment_status") in ("paid", "no_payment_required")
+        if (
+            kind in ("checkout.session.completed", "checkout.session.async_payment_succeeded")
+            and paid
+            and obj.get("client_reference_id")
+        ):
+            # Delayed payment methods complete checkout unpaid; Pro waits for
+            # async_payment_succeeded in that case.
             try:
                 user_id = int(obj["client_reference_id"])
             except ValueError:
@@ -503,7 +522,9 @@ def create_app(
             context = f"{earlier}\n\n{context}".strip()
             guest = guest or parent["guest"]
 
-        meeting_id = db.create_meeting(user["id"], question, context, body.mode, body.parent_id, guest)
+        meeting_id = await asyncio.to_thread(
+            db.create_meeting, user["id"], question, context, body.mode, body.parent_id, guest
+        )
         guest_advisor = make_guest(guest["name"], guest["perspective"]) if guest else None
 
         async def events():

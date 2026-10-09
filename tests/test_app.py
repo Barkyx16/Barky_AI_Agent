@@ -410,7 +410,7 @@ def test_checkout_and_subscription_lifecycle(tmp_path):
     assert bad.status_code == 400
 
     body, header = _signed(
-        {"type": "checkout.session.completed", "data": {"object": {"client_reference_id": user_id, "customer": "cus_1"}}},
+        {"type": "checkout.session.completed", "data": {"object": {"client_reference_id": user_id, "customer": "cus_1", "payment_status": "paid"}}},
         "whsec_test",
     )
     assert client.post("/api/billing/webhook", content=body, headers={"stripe-signature": header}).status_code == 200
@@ -756,3 +756,57 @@ def test_shared_page_has_link_preview_tags(tmp_path):
     fallback = client.get("/s/unknown-token")
     assert fallback.status_code == 200 and "your private board of advisors" in fallback.text
     assert client.get("/static/og.png").headers["content-type"] == "image/png"
+
+
+# ---- regressions from code review -----------------------------------------
+
+
+def test_reminder_subject_has_no_newlines(tmp_path):
+    from datetime import date
+
+    client, mailer = reset_client(tmp_path)
+    signup(client)
+    events(client.post("/api/meetings", json={"question": "Should I move?\nWe have two kids"}))
+    with client.app.state.db.conn() as c:
+        c.execute("UPDATE meetings SET review_at = ?", (date.today().isoformat(),))
+    assert client.app.state.send_review_reminders() == 1
+    subject = mailer.sent[-1][1]
+    assert "\n" not in subject and "Should I move? We have two kids" in subject
+
+
+def test_reminders_without_any_known_url_are_skipped(tmp_path):
+    mailer = FakeMailer()
+    app = create_app(settings(tmp_path), engine=DemoEngine(delay=0), mailer=mailer)
+    assert app.state.send_review_reminders() == 0  # no public URL, no request seen yet
+
+
+def test_unpaid_checkout_does_not_grant_pro(tmp_path):
+    client, _ = billing_client(tmp_path)
+    signup(client)
+    uid = "1"
+    obj = {"client_reference_id": uid, "customer": "cus_9", "payment_status": "unpaid"}
+    body, header = _signed({"type": "checkout.session.completed", "data": {"object": obj}}, "whsec_test")
+    client.post("/api/billing/webhook", content=body, headers={"stripe-signature": header})
+    assert client.get("/api/me").json()["usage"]["plan"] == "free"
+    obj["payment_status"] = "paid"
+    body, header = _signed({"type": "checkout.session.async_payment_succeeded", "data": {"object": obj}}, "whsec_test")
+    client.post("/api/billing/webhook", content=body, headers={"stripe-signature": header})
+    assert client.get("/api/me").json()["usage"]["plan"] == "pro"
+
+
+@pytest.mark.anyio
+async def test_cancelling_a_run_stops_it():
+    from boardroom.hub import MeetingHub
+
+    async def endless():
+        while True:
+            await asyncio.sleep(0.01)
+            yield {"type": "tick"}
+
+    hub = MeetingHub()
+    run = hub.start(5, user_id=1, events=endless())
+    await asyncio.sleep(0.05)
+    await hub.cancel(5, user_id=2)  # someone else's: ignored
+    assert not run.task.done()
+    await hub.cancel_user(1)
+    assert run.task.done() and run.finished

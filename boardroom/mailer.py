@@ -17,7 +17,7 @@ class Mailer:
         msg = EmailMessage()
         msg["From"] = self.sender
         msg["To"] = to
-        msg["Subject"] = subject
+        msg["Subject"] = " ".join(subject.split())  # header values can't contain newlines
         msg.set_content(body)
         context = ssl.create_default_context()
         if self.port == 465:
