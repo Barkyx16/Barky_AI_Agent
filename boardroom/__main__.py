@@ -1,0 +1,45 @@
+"""Command line: `python -m boardroom` to serve, `python -m boardroom set-plan EMAIL pro` to manage plans."""
+
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="boardroom")
+    sub = parser.add_subparsers(dest="command")
+    serve = sub.add_parser("serve", help="run the web app (default)")
+    serve.add_argument("--host", default=os.environ.get("HOST", "127.0.0.1"))
+    serve.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8000")))
+    plan = sub.add_parser("set-plan", help="set a user's plan")
+    plan.add_argument("email")
+    plan.add_argument("plan", choices=["free", "pro"])
+    args = parser.parse_args(argv)
+
+    if args.command == "set-plan":
+        from .config import Settings
+        from .db import Database
+
+        db = Database(Settings.from_env().db_path)
+        if not db.set_plan(args.email.strip().lower(), args.plan):
+            print(f"No user with email {args.email}", file=sys.stderr)
+            return 1
+        print(f"{args.email} is now on the {args.plan} plan.")
+        return 0
+
+    import uvicorn
+
+    from .app import create_app
+
+    host = getattr(args, "host", os.environ.get("HOST", "127.0.0.1"))
+    port = getattr(args, "port", int(os.environ.get("PORT", "8000")))
+    app = create_app()
+    print(f"Boardroom is open at http://{host}:{port}" + ("  (demo mode)" if app.state.engine.name == "demo" else ""))
+    uvicorn.run(app, host=host, port=port, log_level="warning")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

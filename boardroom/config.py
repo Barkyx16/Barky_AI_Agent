@@ -1,0 +1,57 @@
+"""Runtime settings, read from environment variables (and an optional .env file)."""
+
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def _load_dotenv(path: Path) -> None:
+    """Minimal .env loader so the app runs without extra dependencies."""
+    if not path.is_file():
+        return
+    for raw in path.read_text().splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key, value = key.strip(), value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+def _flag(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None or value == "":
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+@dataclass(frozen=True)
+class Settings:
+    model: str
+    db_path: str
+    web_search: bool
+    free_daily_limit: int
+    secure_cookies: bool
+    demo_mode: bool
+    demo_delay: float
+
+    @classmethod
+    def from_env(cls) -> "Settings":
+        _load_dotenv(ROOT / ".env")
+        has_credentials = bool(
+            os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")
+        )
+        return cls(
+            model=os.environ.get("BOARDROOM_MODEL", "claude-opus-5-5"),
+            db_path=os.environ.get("BOARDROOM_DB_PATH", str(ROOT / "data" / "boardroom.db")),
+            web_search=_flag("BOARDROOM_WEB_SEARCH", True),
+            free_daily_limit=int(os.environ.get("BOARDROOM_FREE_DAILY_LIMIT", "3")),
+            secure_cookies=_flag("BOARDROOM_SECURE_COOKIES", False),
+            demo_mode=_flag("BOARDROOM_DEMO", False) or not has_credentials,
+            demo_delay=float(os.environ.get("BOARDROOM_DEMO_DELAY", "0.025")),
+        )
