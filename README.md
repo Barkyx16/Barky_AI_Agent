@@ -76,6 +76,9 @@ docker run -p 8000:8000 -e ANTHROPIC_API_KEY=sk-ant-... -v boardroom-data:/data 
 | `BOARDROOM_PRO_PRICE_USD` | `12` | Pro price as a number, for the revenue estimate. |
 | `BOARDROOM_PRICE_INPUT` / `_OUTPUT` / `_CACHE_WRITE` / `_CACHE_READ` | `4` / `20` / `5` / `0.20` | API prices in USD per million tokens, for cost tracking (Claude Opus 5.5 list prices). |
 | `BOARDROOM_PRICE_SEARCH` | `0.01` | Cost per web search. |
+| `BOARDROOM_COMPANY_NAME` | `Boardroom` | Legal name shown in the Terms and Privacy Policy. |
+| `BOARDROOM_CONTACT_EMAIL` | `support@example.com` | Contact address in the legal pages. **Set this before launch.** |
+| `BOARDROOM_LEGAL_UPDATED` | `October 9, 2026` | "Last updated" date on the legal pages. |
 | `BOARDROOM_MAX_CONCURRENT` | `2` | Meetings one user can have in session at once. |
 | `BOARDROOM_PRO_DAILY_LIMIT` | `50` | Fair-use cap on Pro meetings per day, so one account can't run up a huge API bill. |
 | `HOST` / `PORT` | `127.0.0.1` / `8000` | Where the server listens. |
@@ -114,6 +117,10 @@ browser ──POST /api/meetings──▶ FastAPI ──▶ meeting.run_meeting(
 - `boardroom/billing.py`: Stripe Checkout, customer portal, and webhook signature checks.
 - `boardroom/app.py`: API, auth (with login throttling), quotas, share links, and security headers.
 - `boardroom/static/`: the single-page front end, in plain HTML, CSS, and JS.
+
+## Legal pages
+
+`/terms` and `/privacy` are rendered from `boardroom/legal/terms.md` and `privacy.md`, with your company name and contact email filled in. They include a clear "not professional advice" disclaimer and crisis guidance. **They are starting templates, not legal advice. Have a lawyer review them for your jurisdiction before you charge customers.**
 
 ## Security
 

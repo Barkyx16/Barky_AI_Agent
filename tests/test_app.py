@@ -882,3 +882,15 @@ def test_advisors_reply_in_the_users_language():
 
     assert "language the person wrote" in CHAIR_SYSTEM
     assert all("language the person wrote" in advisor_system(a) for a in BOARD)
+
+
+def test_legal_pages(tmp_path):
+    client = make_client(tmp_path, company_name="Acme <LLC>", contact_email="help@acme.test")
+    terms = client.get("/terms")
+    assert terms.status_code == 200
+    assert "Terms of Service" in terms.text and "Not professional advice" in terms.text
+    assert "Acme &lt;LLC&gt;" in terms.text and "<LLC>" not in terms.text
+    assert "help@acme.test" in terms.text
+    privacy = client.get("/privacy").text
+    assert "<h1>Privacy Policy</h1>" in privacy and "<strong>We do not sell your personal information.</strong>" in privacy
+    assert "{" not in privacy

@@ -50,6 +50,9 @@ class Settings:
     smtp_password: str = ""
     smtp_from: str = ""
     admin_emails: tuple[str, ...] = ()
+    company_name: str = "Boardroom"
+    contact_email: str = "support@example.com"
+    legal_updated: str = "October 9, 2026"
     max_concurrent_meetings: int = 2
     pro_daily_limit: int = 50
     pro_price_usd: float = 12.0
@@ -86,6 +89,9 @@ class Settings:
                 e.strip().lower() for e in os.environ.get("BOARDROOM_ADMIN_EMAILS", "").split(",") if e.strip()
             ),
             pro_price_usd=float(os.environ.get("BOARDROOM_PRO_PRICE_USD", "12")),
+            company_name=os.environ.get("BOARDROOM_COMPANY_NAME", "Boardroom"),
+            contact_email=os.environ.get("BOARDROOM_CONTACT_EMAIL", "support@example.com"),
+            legal_updated=os.environ.get("BOARDROOM_LEGAL_UPDATED", "October 9, 2026"),
             max_concurrent_meetings=int(os.environ.get("BOARDROOM_MAX_CONCURRENT", "2")),
             pro_daily_limit=int(os.environ.get("BOARDROOM_PRO_DAILY_LIMIT", "50")),
         )

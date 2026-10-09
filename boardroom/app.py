@@ -30,6 +30,7 @@ from .costs import Prices
 from .db import Database
 from .engine import Engine, make_engine
 from .hub import MeetingHub
+from . import legal
 from .mailer import Mailer
 from .sample import SAMPLE_MEETING
 from .meeting import run_meeting
@@ -583,6 +584,18 @@ def create_app(
             "live, then get a verdict and an action plan.",
             "/",
         )
+
+    @app.get("/terms")
+    def terms():
+        return HTMLResponse(legal.render(
+            "terms", "Boardroom", settings.company_name, settings.contact_email, settings.legal_updated
+        ))
+
+    @app.get("/privacy")
+    def privacy():
+        return HTMLResponse(legal.render(
+            "privacy", "Boardroom", settings.company_name, settings.contact_email, settings.legal_updated
+        ))
 
     @app.get("/s/{token}")
     def shared_page(token: str, request: Request):

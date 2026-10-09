@@ -217,6 +217,7 @@ function renderLanding(tab = "signup") {
         <div class="seats">${seats}</div>
         <div class="how"><span><b>1</b>Ask your question</span><span><b>2</b>Watch the board debate</span><span><b>3</b>Get a verdict and a plan</span></div>
         <p class="sample-link"><a class="btn" href="/#/sample">See a sample meeting →</a></p>
+        <p class="legal-links"><a href="/terms">Terms</a> · <a href="/privacy">Privacy</a></p>
       </section>
       <section class="landing-auth">
         <div class="auth-card">
@@ -235,6 +236,7 @@ function renderLanding(tab = "signup") {
           </form>
           ${tab === "login" && state.config.password_reset ? `<p class="fine"><button class="link" id="forgot" type="button">Forgot your password?</button></p>` : ""}
           <p class="fine">${state.config.free_daily_limit} free meetings a day. No card needed.${state.config.demo ? " Running in demo mode." : ""}</p>
+          ${tab === "signup" ? `<p class="fine">By creating an account you agree to the <a href="/terms" target="_blank">Terms</a> and <a href="/privacy" target="_blank">Privacy Policy</a>. Boardroom gives AI-generated perspectives, not professional advice.</p>` : ""}
         </div>
       </section>
     </div>`;
@@ -484,7 +486,7 @@ function showSettings() {
           <button class="btn btn-danger" type="submit">Delete my account</button>
         </form>
       </details>
-      <div class="actions"><button class="btn btn-ghost" id="set-close">Close</button></div>
+      <div class="actions"><span class="legal-links"><a href="/terms" target="_blank">Terms</a> · <a href="/privacy" target="_blank">Privacy</a></span><button class="btn btn-ghost" id="set-close">Close</button></div>
     </div>`;
   const close = openModal(back);
   back.querySelector("#set-close").addEventListener("click", close);
