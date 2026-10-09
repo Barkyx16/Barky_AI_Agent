@@ -8,7 +8,7 @@ from typing import AsyncIterator, Callable, Protocol
 
 import anthropic
 
-from .board import CHAIR_SYSTEM, REBUTTAL_MARKER, Advisor, Verdict, advisor_system
+from .board import ASK_MARKER, CHAIR_SYSTEM, REBUTTAL_MARKER, Advisor, Verdict, advisor_system
 
 # Opt into server-side refusal fallbacks: if a safety classifier declines a request,
 # the API re-runs it on Anthropic's recommended fallback model in the same call.
@@ -207,6 +207,14 @@ DEMO_REBUTTALS = {
 }
 
 
+DEMO_ANSWER = (
+    "Good question. Speaking as **{name}**: my view on **“{t}”** hasn't changed. The deciding "
+    "factor is still evidence from a small, real test, not more analysis. If you can only do one "
+    "thing this week, **do the step that gets you real data fastest.**\n\n"
+    "_Demo mode: with an API key connected, I answer your exact question._"
+)
+
+
 class DemoEngine:
     name = "demo"
 
@@ -215,7 +223,11 @@ class DemoEngine:
 
     async def take(self, advisor: Advisor, prompt: str) -> AsyncIterator[Event]:
         rebuttal = REBUTTAL_MARKER in prompt
-        template = (DEMO_REBUTTALS if rebuttal else DEMO_OPENINGS)[advisor.key]
+        if ASK_MARKER in prompt:
+            template = DEMO_ANSWER
+            rebuttal = True  # no simulated web research for direct questions
+        else:
+            template = (DEMO_REBUTTALS if rebuttal else DEMO_OPENINGS)[advisor.key]
         text = template.format(t=_topic(prompt), name=advisor.name)
         # Stagger advisors so the discussion feels live.
         offset = int(hashlib.md5(advisor.key.encode()).hexdigest(), 16) % 5

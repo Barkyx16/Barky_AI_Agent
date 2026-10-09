@@ -909,3 +909,60 @@ def test_backup_command(tmp_path, monkeypatch):
     assert main(["backup", str(dest)]) == 0
     with sq.connect(dest) as c:
         assert c.execute("SELECT email FROM users").fetchone()[0] == "ada@example.com"
+
+
+# ---- ask an advisor --------------------------------------------------------
+
+
+def test_ask_an_advisor(tmp_path):
+    client = make_client(tmp_path)
+    signup(client)
+    guest = {"name": "My mentor", "perspective": "Twenty years in the industry."}
+    meeting_id = events(client.post("/api/meetings", json={"question": "Should I go freelance?", "guest": guest}))[0]["id"]
+
+    evs = events(client.post(f"/api/meetings/{meeting_id}/ask", json={"advisor": "skeptic", "question": "What's the worst case?"}))
+    assert evs[-1]["type"] == "done"
+    answer = "".join(e["text"] for e in evs if e["type"] == "delta")
+    assert "The Skeptic" in answer and answer == evs[-1]["answer"]
+
+    events(client.post(f"/api/meetings/{meeting_id}/ask", json={"advisor": "guest", "question": "What would you do?"}))
+    asks = client.get(f"/api/meetings/{meeting_id}").json()["asks"]
+    assert [(a["advisor"], a["question"]) for a in asks] == [("skeptic", "What's the worst case?"), ("guest", "What would you do?")]
+    assert "My mentor" in asks[1]["answer"]
+
+    # Private: not on the shared page.
+    token = client.post(f"/api/meetings/{meeting_id}/share").json()["token"]
+    assert client.get(f"/api/shared/{token}").json()["asks"] == []
+    assert "worst case" not in client.get(f"/api/shared/{token}").text
+
+
+def test_ask_validation_and_ownership(tmp_path):
+    client = make_client(tmp_path)
+    signup(client)
+    meeting_id = events(client.post("/api/meetings", json={"question": "No guest here"}))[0]["id"]
+    assert client.post(f"/api/meetings/{meeting_id}/ask", json={"advisor": "guest", "question": "Hello?"}).status_code == 404
+    assert client.post(f"/api/meetings/{meeting_id}/ask", json={"advisor": "chair", "question": "Hello?"}).status_code == 422
+    with client.app.state.db.conn() as c:
+        c.execute("UPDATE meetings SET status = 'running'")
+    assert client.post(f"/api/meetings/{meeting_id}/ask", json={"advisor": "skeptic", "question": "Hello?"}).status_code == 409
+    client.post("/api/logout")
+    signup(client, email="eve@example.com")
+    assert client.post(f"/api/meetings/{meeting_id}/ask", json={"advisor": "skeptic", "question": "Hello?"}).status_code == 404
+
+
+def test_ask_daily_limit_and_cost(tmp_path):
+    class PaidMetered(MeteredEngine):
+        name = "claude"
+
+    client = make_client(tmp_path, engine=PaidMetered(delay=0), demo_mode=False, free_daily_asks=2)
+    signup(client)
+    meeting_id = events(client.post("/api/meetings", json={"question": "Limit me"}))[0]["id"]
+    with client.app.state.db.conn() as c:
+        before = c.execute("SELECT output_tokens FROM meetings WHERE id = ?", (meeting_id,)).fetchone()[0]
+    for _ in range(2):
+        assert client.post(f"/api/meetings/{meeting_id}/ask", json={"advisor": "operator", "question": "Next step?"}).status_code == 200
+    r = client.post(f"/api/meetings/{meeting_id}/ask", json={"advisor": "operator", "question": "Again?"})
+    assert r.status_code == 429 and "Upgrade" in r.json()["detail"]
+    with client.app.state.db.conn() as c:
+        after = c.execute("SELECT output_tokens FROM meetings WHERE id = ?", (meeting_id,)).fetchone()[0]
+    assert after == before + 2 * 500

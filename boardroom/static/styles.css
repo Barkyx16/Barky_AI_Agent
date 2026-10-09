@@ -272,6 +272,16 @@ button, input, textarea { font: inherit; color: inherit; }
 .sources b { color: var(--text-3); font-weight: 600; margin-right: 6px; }
 .sources a { color: var(--text-2); text-decoration: none; border-bottom: 1px dotted var(--text-3); margin-right: 10px; display: inline-block; max-width: 26ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 
+/* Ask an advisor ---------------------------------------------------------- */
+.ask-open { margin-top: 12px; font-size: 13px; color: var(--c, var(--accent)); text-decoration-color: color-mix(in srgb, var(--c) 45%, transparent); }
+.ask-form { display: flex; gap: 8px; margin-top: 12px; }
+.ask-form .input { flex: 1; min-width: 0; padding: 8px 12px; font-size: 14px; background: var(--bg); }
+.asks:not(:empty) { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line); display: grid; gap: 10px; }
+.qa .q { font-size: 13.5px; font-weight: 600; color: var(--text); padding-left: 10px; border-left: 2px solid var(--c, var(--accent)); margin-bottom: 4px; }
+.qa .a { font-size: 14px; }
+.qa .a:empty::before { content: "Thinking…"; color: var(--text-3); font-style: italic; }
+.qa .muted { color: var(--text-3); font-style: italic; }
+
 /* Verdict ---------------------------------------------------------------- */
 .verdict { padding: 26px; border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); position: relative; }
 .verdict-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; align-items: start; }
@@ -351,7 +361,7 @@ button, input, textarea { font: inherit; color: inherit; }
 @media print {
   :root, :root:not([data-theme="light"]), :root[data-theme] { color-scheme: light; --bg: #fff; --bg-elev: #fff; --bg-sunk: #f4f4f4; --text: #000; --text-2: #333; --text-3: #666; --line: #ccc; --shadow: none; --accent-soft: #f6f1e6; }
   body { background: #fff; font-size: 12px; }
-  .sidebar, .topbar, .scrim, .head-actions, .demo-banner, .followup, .alert, #toast, .public-bar .btn, .cta { display: none !important; }
+  .ask-open, .ask-form, .sidebar, .topbar, .scrim, .head-actions, .demo-banner, .followup, .alert, #toast, .public-bar .btn, .cta { display: none !important; }
   .shell { display: block; }
   .main { padding: 0; }
   .card, .panel, .step { break-inside: avoid; box-shadow: none; }

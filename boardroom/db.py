@@ -50,6 +50,14 @@ CREATE TABLE IF NOT EXISTS takes (
     sources     TEXT NOT NULL DEFAULT '[]',
     UNIQUE(meeting_id, member, round)
 );
+CREATE TABLE IF NOT EXISTS asks (
+    id          INTEGER PRIMARY KEY,
+    meeting_id  INTEGER NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+    advisor     TEXT NOT NULL,
+    question    TEXT NOT NULL,
+    answer      TEXT NOT NULL,
+    created_at  TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS steps (
     id          INTEGER PRIMARY KEY,
     meeting_id  INTEGER NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
@@ -283,6 +291,35 @@ class Database:
                     (meeting_id, i, step["title"], step.get("detail", ""), step.get("when", "")),
                 )
 
+    def add_ask(self, meeting_id: int, advisor: str, question: str, answer: str) -> None:
+        with self.conn() as c:
+            c.execute(
+                "INSERT INTO asks (meeting_id, advisor, question, answer, created_at) VALUES (?, ?, ?, ?, ?)",
+                (meeting_id, advisor, question, answer, now_iso()),
+            )
+
+    def asks_today(self, user_id: int) -> int:
+        day = datetime.now(timezone.utc).date().isoformat()
+        with self.conn() as c:
+            return int(c.execute(
+                "SELECT COUNT(*) FROM asks a JOIN meetings m ON m.id = a.meeting_id "
+                "WHERE m.user_id = ? AND a.created_at >= ?",
+                (user_id, day),
+            ).fetchone()[0])
+
+    def add_usage(self, meeting_id: int, usage: dict, cost_usd: float) -> None:
+        with self.conn() as c:
+            c.execute(
+                "UPDATE meetings SET input_tokens = input_tokens + ?, output_tokens = output_tokens + ?, "
+                "cache_write_tokens = cache_write_tokens + ?, cache_read_tokens = cache_read_tokens + ?, "
+                "web_searches = web_searches + ?, cost_usd = cost_usd + ? WHERE id = ?",
+                (
+                    usage.get("input_tokens", 0), usage.get("output_tokens", 0),
+                    usage.get("cache_write_tokens", 0), usage.get("cache_read_tokens", 0),
+                    usage.get("web_searches", 0), round(cost_usd, 6), meeting_id,
+                ),
+            )
+
     def record_usage(self, meeting_id: int, usage: dict, cost_usd: float) -> None:
         with self.conn() as c:
             c.execute(
@@ -360,6 +397,10 @@ class Database:
                 "ORDER BY position",
                 (meeting_id,),
             ).fetchall()
+            asks = c.execute(
+                "SELECT advisor, question, answer, created_at FROM asks WHERE meeting_id = ? ORDER BY id",
+                (meeting_id,),
+            ).fetchall()
         return {
             "id": row["id"],
             "parent_id": row["parent_id"],
@@ -381,6 +422,7 @@ class Database:
                 }
                 for t in takes
             ],
+            "asks": [dict(a) for a in asks],
             "steps": [
                 {
                     "id": s["id"],
@@ -441,6 +483,7 @@ class Database:
             "created_at": meeting["created_at"],
             "verdict": meeting["verdict"],
             "takes": meeting["takes"],
+            "asks": [],
             "steps": [{**s, "id": 0, "done": False} for s in meeting["steps"]],
         }
 

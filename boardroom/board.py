@@ -180,6 +180,33 @@ def rebuttal_prompt(
     )
 
 
+ASK_MARKER = "The person has a direct question for you."
+
+
+def ask_prompt(
+    advisor: Advisor,
+    question: str,
+    context: str,
+    today: str,
+    my_remarks: list[str],
+    headline: str,
+    history: list[tuple[str, str]],
+    ask: str,
+) -> str:
+    parts = [brief(question, context, today)]
+    if my_remarks:
+        parts.append("What you said in the meeting:\n" + "\n\n".join(my_remarks))
+    if headline:
+        parts.append(f"The Chair's verdict: {headline}")
+    for q, a in history:
+        parts.append(f"Earlier they asked you: {q}\nYou answered: {a}")
+    parts.append(
+        f"{ASK_MARKER} Answer it from your role in around 60-150 words. Stay consistent with "
+        f"what you said before, or say clearly what changed your mind.\n\nTheir question: {ask.strip()}"
+    )
+    return "\n\n".join(parts)
+
+
 CHAIR_SYSTEM = f"""\
 {CHARTER}
 You are the Chair. You've heard every advisor. Your job is to make the call: weigh their \

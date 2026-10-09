@@ -836,7 +836,11 @@ function renderLive() {
     view.innerHTML = meetingLayout({
       question: live.question, context: live.context, mode: live.mode, created_at: null, running: live.running,
       shareable: !!live.verdict, share_token: live.share_token,
-    }, live.rounds, (round) => seatsFor(live.guest).map((a) => remarkCard(a, live.remarks[a.key][round], round)).join(""))
+    }, live.rounds, (round) => seatsFor(live.guest).map((a) => {
+      const r = live.remarks[a.key][round];
+      const askable = round === 1 && live.verdict && !live.running && r.text;
+      return remarkCard(a, r, round, askable ? (live.asks || []).filter((x) => x.advisor === a.key) : null);
+    }).join(""))
       + chairSection(live)
       + (live.error ? errorBox(live.error) : "");
     view.dataset.layout = layoutKey;
@@ -904,14 +908,78 @@ function sourcesHtml(sources) {
   }).join("")}</div>`;
 }
 
-function remarkCard(a, r, round) {
+function remarkCard(a, r, round, ask = null) {
   return `<article class="card advisor-card" data-c="${a.color}" data-card="${a.key}-${round}">
     <div class="advisor-head"><div class="avatar" data-c="${a.color}">${esc(a.initials)}</div>
       <div><div class="name">${esc(a.name)}</div><div class="role">${esc(a.role)}</div></div>
       ${stateBadge(r)}</div>
     ${remarkBody(r)}
     ${r.sources && r.sources.length ? sourcesHtml(r.sources) : ""}
+    ${ask ? askSection(a, ask) : ""}
   </article>`;
+}
+
+function askBubble(q, answerHtml, streaming = false) {
+  return `<div class="qa"><div class="q">${esc(q)}</div><div class="a prose ${streaming ? "caret" : ""}">${answerHtml}</div></div>`;
+}
+
+function askSection(a, asks) {
+  const short = a.name.replace(/^The /, "the ");
+  return `<div class="asks" data-asks="${a.key}">
+    ${asks.map((x) => askBubble(x.question, md(x.answer))).join("")}
+  </div>
+  <form class="ask-form" data-ask-form="${a.key}" hidden>
+    <label class="sr-only" for="ask-${a.key}">Question for ${esc(a.name)}</label>
+    <input class="input" id="ask-${a.key}" maxlength="1000" placeholder="Ask ${esc(short)} anything about this">
+    <button class="btn btn-primary btn-sm" type="submit">Ask</button>
+  </form>
+  <button class="link ask-open" type="button" data-ask-open="${a.key}">Ask ${esc(short)} a question</button>`;
+}
+
+/* Stream one advisor's answer to a direct question. */
+async function askAdvisor(m, key, question, card) {
+  const thread = card.querySelector(".asks");
+  thread.insertAdjacentHTML("beforeend", askBubble(question, "", true));
+  const bubble = thread.lastElementChild.querySelector(".a");
+  let text = "";
+  try {
+    const res = await fetch(`/api/meetings/${m.id}/ask`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin",
+      body: JSON.stringify({ advisor: key, question }),
+    });
+    if (!res.ok) {
+      let msg = "Couldn't ask that question.";
+      try { const d = await res.json(); if (typeof d.detail === "string") msg = d.detail; } catch (_) { /* ignore */ }
+      thread.lastElementChild.remove();
+      toast(msg);
+      if (res.status === 429 && /Upgrade/.test(msg)) showUpgrade();
+      return false;
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buffer.indexOf("\n\n")) >= 0) {
+        const line = buffer.slice(0, idx).split("\n").find((l) => l.startsWith("data: "));
+        buffer = buffer.slice(idx + 2);
+        if (!line) continue;
+        const ev = JSON.parse(line.slice(6));
+        if (ev.type === "delta") { text += ev.text; bubble.innerHTML = md(text); }
+        else if (ev.type === "error") { bubble.innerHTML = `<span class="muted">${esc(ev.message)}</span>`; }
+        else if (ev.type === "done") {
+          (m.asks = m.asks || []).push({ advisor: key, question, answer: ev.answer });
+        }
+      }
+    }
+  } catch (_) {
+    bubble.innerHTML = `<span class="muted">The connection dropped. Please try again.</span>`;
+  }
+  bubble.classList.remove("caret");
+  return true;
 }
 
 function chairSection(m) {
@@ -989,6 +1057,25 @@ function bindMeetingActions(view, m) {
     } catch (err) { toast(err.message); }
   });
   view.querySelector('[data-act="share"]')?.addEventListener("click", (e) => showShare(m, e.currentTarget));
+  view.querySelectorAll("[data-ask-open]").forEach((btn) => btn.addEventListener("click", () => {
+    const card = btn.closest(".advisor-card");
+    const form = card.querySelector("[data-ask-form]");
+    form.hidden = false;
+    btn.hidden = true;
+    form.querySelector("input").focus();
+  }));
+  view.querySelectorAll("[data-ask-form]").forEach((form) => form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const input = form.querySelector("input");
+    const q = input.value.trim();
+    if (q.length < 3) return;
+    const btn = form.querySelector("button");
+    btn.disabled = true; input.disabled = true;
+    const ok = await askAdvisor(m, form.dataset.askForm, q, form.closest(".advisor-card"));
+    btn.disabled = false; input.disabled = false;
+    if (ok) input.value = "";
+    input.focus();
+  }));
   view.querySelector('[data-act="review"]')?.addEventListener("click", () => {
     const input = view.querySelector("#fu");
     if (!input) return;
@@ -1074,7 +1161,7 @@ async function loadMeeting(id) {
   view.innerHTML = meetingLayout(m, rounds, (round) => seatsFor(m.guest).map((a) => {
     const t = byKey[`${a.key}-${round}`];
     const r = t ? { text: t.text, done: true, status: "Done", sources: t.sources } : { text: "", done: true, status: "Sat out", sources: [] };
-    return remarkCard(a, r, round);
+    return remarkCard(a, r, round, round === 1 && m.status === "done" && t ? (m.asks || []).filter((x) => x.advisor === a.key) : null);
   }).join(""))
     + (m.verdict ? `<div class="section-title">The verdict</div>${verdictCard(m.verdict, m.steps, false, m.guest, m.review_at)}${followupBox()}` : "")
     + (stalled ? errorBox(m.status === "running" ? "This meeting is still in session. Refresh in a moment to see the result." : "This meeting didn't finish.") : "");

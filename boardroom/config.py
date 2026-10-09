@@ -53,6 +53,8 @@ class Settings:
     company_name: str = "Boardroom"
     contact_email: str = "support@example.com"
     legal_updated: str = "October 9, 2026"
+    free_daily_asks: int = 10
+    pro_daily_asks: int = 200
     max_concurrent_meetings: int = 2
     pro_daily_limit: int = 50
     pro_price_usd: float = 12.0
@@ -92,6 +94,8 @@ class Settings:
             company_name=os.environ.get("BOARDROOM_COMPANY_NAME", "Boardroom"),
             contact_email=os.environ.get("BOARDROOM_CONTACT_EMAIL", "support@example.com"),
             legal_updated=os.environ.get("BOARDROOM_LEGAL_UPDATED", "October 9, 2026"),
+            free_daily_asks=int(os.environ.get("BOARDROOM_FREE_DAILY_ASKS", "10")),
+            pro_daily_asks=int(os.environ.get("BOARDROOM_PRO_DAILY_ASKS", "200")),
             max_concurrent_meetings=int(os.environ.get("BOARDROOM_MAX_CONCURRENT", "2")),
             pro_daily_limit=int(os.environ.get("BOARDROOM_PRO_DAILY_LIMIT", "50")),
         )

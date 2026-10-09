@@ -13,7 +13,7 @@ import sqlite3
 import time
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal
 
@@ -24,11 +24,11 @@ from pydantic import BaseModel, Field
 
 from . import auth
 from .billing import Billing, BillingError, verify_signature
-from .board import GUEST_COLOR, board_public, make_guest
+from .board import BOARD_BY_KEY, GUEST_COLOR, ask_prompt, board_public, make_guest
 from .config import Settings
-from .costs import Prices
+from .costs import Prices, add_usage
 from .db import Database
-from .engine import Engine, make_engine
+from .engine import Engine, EngineError, make_engine
 from .hub import MeetingHub
 from . import legal
 from .mailer import Mailer
@@ -86,6 +86,11 @@ class MeetingIn(BaseModel):
     mode: Literal["quick", "deep"] = "quick"
     parent_id: int | None = None
     guest: GuestIn | None = None
+
+
+class AskIn(BaseModel):
+    advisor: Literal["analyst", "skeptic", "strategist", "operator", "guest"]
+    question: str = Field(min_length=3, max_length=1000)
 
 
 class StepIn(BaseModel):
@@ -548,6 +553,68 @@ def create_app(
 
         run = hub.start(meeting_id, user["id"], events())
         return _event_stream(run)
+
+    @app.post("/api/meetings/{meeting_id}/ask")
+    async def ask_advisor(meeting_id: int, body: AskIn, user=Depends(current_user)):
+        m = await asyncio.to_thread(db.get_meeting, user["id"], meeting_id)
+        if m is None:
+            raise HTTPException(status_code=404, detail="Meeting not found.")
+        if m["status"] != "done":
+            raise HTTPException(status_code=409, detail="You can ask questions once the meeting has finished.")
+        if body.advisor == "guest":
+            if not m["guest"]:
+                raise HTTPException(status_code=404, detail="This meeting had no guest advisor.")
+            advisor = make_guest(m["guest"]["name"], m["guest"]["perspective"])
+        else:
+            advisor = BOARD_BY_KEY[body.advisor]
+        if not demo:
+            limit = settings.pro_daily_asks if user["plan"] == "pro" else settings.free_daily_asks
+            if await asyncio.to_thread(db.asks_today, user["id"]) >= limit:
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"You've asked {limit} questions today. "
+                    + ("Upgrade to Pro for more." if user["plan"] != "pro" else "The limit resets at midnight UTC."),
+                )
+        prompt = ask_prompt(
+            advisor,
+            m["question"],
+            m["context"],
+            date.today().strftime("%A, %B %d, %Y"),
+            [t["text"] for t in m["takes"] if t["member"] == advisor.key and t["text"]],
+            (m["verdict"] or {}).get("headline", ""),
+            [(a["question"], a["answer"]) for a in m["asks"] if a["advisor"] == advisor.key],
+            body.question,
+        )
+
+        async def stream():
+            parts: list[str] = []
+            usage: dict[str, int] = {}
+            try:
+                async for kind, payload in engine.take(advisor, prompt):
+                    if kind == "text":
+                        parts.append(payload)
+                        yield _sse({"type": "delta", "text": payload})
+                    elif kind == "status":
+                        yield _sse({"type": "status", "text": payload})
+                    elif kind == "sources":
+                        yield _sse({"type": "sources", "sources": payload})
+                    elif kind == "usage":
+                        add_usage(usage, payload)
+            except EngineError as exc:
+                yield _sse({"type": "error", "message": str(exc)})
+                return
+            finally:
+                if usage:
+                    await asyncio.to_thread(db.add_usage, meeting_id, usage, prices.cost(usage))
+            answer = "".join(parts).strip()
+            await asyncio.to_thread(db.add_ask, meeting_id, advisor.key, body.question.strip(), answer)
+            yield _sse({"type": "done", "answer": answer})
+
+        return StreamingResponse(
+            stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     @app.get("/api/meetings/{meeting_id}/events")
     def follow_meeting(meeting_id: int, user=Depends(current_user)):

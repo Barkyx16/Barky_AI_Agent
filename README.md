@@ -17,6 +17,7 @@ Boardroom gives anyone a private board of AI advisors. You bring a decision ("Sh
 
 - **Live, parallel debate.** All four advisors stream at the same time.
 - **Guest advisors.** Seat anyone at the table with a name and perspective, or pick a preset. They debate alongside the board and get a vote, and follow-ups keep the same guest.
+- **Ask an advisor.** After the verdict, ask any advisor a direct follow-up ("Skeptic, what's the worst case?") and get a streamed answer in their voice. It costs one API call instead of a full meeting. Free: 10 a day; Pro: 200.
 - **Deep debate mode (Pro).** Adds a rebuttal round where advisors challenge each other before the Chair rules.
 - **Verdict card.** Headline, confidence ring, each advisor's vote, risks, first move, and an action plan.
 - **Never lose a meeting.** Meetings run on the server independently of the browser. Refresh, lose your connection or open a second tab, and the page catches up live.
@@ -79,6 +80,7 @@ docker run -p 8000:8000 -e ANTHROPIC_API_KEY=sk-ant-... -v boardroom-data:/data 
 | `BOARDROOM_COMPANY_NAME` | `Boardroom` | Legal name shown in the Terms and Privacy Policy. |
 | `BOARDROOM_CONTACT_EMAIL` | `support@example.com` | Contact address in the legal pages. **Set this before launch.** |
 | `BOARDROOM_LEGAL_UPDATED` | `October 9, 2026` | "Last updated" date on the legal pages. |
+| `BOARDROOM_FREE_DAILY_ASKS` / `BOARDROOM_PRO_DAILY_ASKS` | `10` / `200` | Questions to individual advisors per day. |
 | `BOARDROOM_MAX_CONCURRENT` | `2` | Meetings one user can have in session at once. |
 | `BOARDROOM_PRO_DAILY_LIMIT` | `50` | Fair-use cap on Pro meetings per day, so one account can't run up a huge API bill. |
 | `HOST` / `PORT` | `127.0.0.1` / `8000` | Where the server listens. |
