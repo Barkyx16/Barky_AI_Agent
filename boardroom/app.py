@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import logging
 import re
 import secrets
 import sqlite3
 import time
 from collections import defaultdict, deque
+from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal
-
-from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
@@ -25,9 +27,12 @@ from .config import Settings
 from .db import Database
 from .engine import Engine, make_engine
 from .hub import MeetingHub
+from .mailer import Mailer
 from .meeting import run_meeting
 
 STATIC = Path(__file__).parent / "static"
+log = logging.getLogger(__name__)
+RESET_MINUTES = 60
 COOKIE = "boardroom_session"
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -53,6 +58,15 @@ class PasswordChangeIn(BaseModel):
     new_password: str = Field(min_length=8, max_length=200)
 
 
+class ForgotIn(BaseModel):
+    email: str = Field(max_length=254)
+
+
+class ResetIn(BaseModel):
+    token: str = Field(min_length=10, max_length=200)
+    password: str = Field(min_length=8, max_length=200)
+
+
 class DeleteAccountIn(BaseModel):
     password: str = Field(max_length=200)
 
@@ -70,9 +84,17 @@ class StepIn(BaseModel):
 
 
 def create_app(
-    settings: Settings | None = None, engine: Engine | None = None, billing: Billing | None = None
+    settings: Settings | None = None,
+    engine: Engine | None = None,
+    billing: Billing | None = None,
+    mailer: Mailer | None = None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
+    if mailer is None and settings.smtp_host:
+        mailer = Mailer(
+            settings.smtp_host, settings.smtp_port, settings.smtp_username,
+            settings.smtp_password, settings.smtp_from,
+        )
     if billing is None and settings.billing_enabled:
         billing = Billing(settings.stripe_secret_key, settings.stripe_price_id, settings.stripe_webhook_secret)
     db = Database(settings.db_path)
@@ -166,6 +188,7 @@ def create_app(
             "free_daily_limit": settings.free_daily_limit,
             "billing": billing is not None,
             "pro_price": settings.pro_price_label,
+            "password_reset": mailer is not None,
         }
 
     @app.post("/api/signup")
@@ -192,6 +215,43 @@ def create_app(
         login_attempts.pop(f"email:{email}", None)
         start_session(response, user["id"])
         return user_out(user)
+
+    @app.post("/api/password/forgot")
+    def forgot_password(body: ForgotIn, request: Request):
+        if mailer is None:
+            raise HTTPException(status_code=404, detail="Password reset isn't set up on this server.")
+        email = body.email.strip().lower()
+        throttle(f"forgot:{email}", limit=3, window=3600)
+        throttle(f"forgot-ip:{request.client.host if request.client else '?'}", limit=20, window=3600)
+        user = db.user_by_email(email)
+        if user is not None:
+            token = secrets.token_urlsafe(32)
+            expires = (datetime.now(timezone.utc) + timedelta(minutes=RESET_MINUTES)).isoformat(timespec="seconds")
+            db.create_reset(_token_hash(token), user["id"], expires)
+            link = f"{settings.public_url or str(request.base_url).rstrip('/')}/#/reset/{token}"
+            try:
+                mailer.send(
+                    user["email"],
+                    "Reset your Boardroom password",
+                    f"Hi {user['name']},\n\nSomeone asked to reset the password for your Boardroom "
+                    f"account. To choose a new password, open this link within {RESET_MINUTES} minutes:\n\n"
+                    f"{link}\n\nIf this wasn't you, you can ignore this email; your password won't change.\n",
+                )
+            except Exception:
+                log.exception("failed to send password reset email")
+                raise HTTPException(status_code=502, detail="We couldn't send the email. Please try again later.")
+        # Same answer whether or not the account exists, so emails can't be probed.
+        return {"ok": True}
+
+    @app.post("/api/password/reset")
+    def reset_password(body: ResetIn, response: Response):
+        user_id = db.consume_reset(_token_hash(body.token))
+        if user_id is None:
+            raise HTTPException(status_code=400, detail="This reset link is invalid or has expired.")
+        db.set_password(user_id, auth.hash_password(body.password))
+        db.delete_all_sessions(user_id)
+        start_session(response, user_id)
+        return user_out(db.user_by_id(user_id))
 
     @app.post("/api/logout")
     def logout(request: Request, response: Response):
@@ -389,6 +449,10 @@ def create_app(
         return {"ok": True, "engine": engine.name}
 
     return app
+
+
+def _token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
 
 
 def with_guest_card(meeting: dict) -> dict:

@@ -44,6 +44,11 @@ class Settings:
     stripe_webhook_secret: str = ""
     public_url: str = ""
     pro_price_label: str = "$12/month"
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
 
     @property
     def billing_enabled(self) -> bool:
@@ -68,4 +73,9 @@ class Settings:
             stripe_webhook_secret=os.environ.get("STRIPE_WEBHOOK_SECRET", ""),
             public_url=os.environ.get("BOARDROOM_PUBLIC_URL", "").rstrip("/"),
             pro_price_label=os.environ.get("BOARDROOM_PRO_PRICE_LABEL", "$12/month"),
+            smtp_host=os.environ.get("SMTP_HOST", ""),
+            smtp_port=int(os.environ.get("SMTP_PORT", "587")),
+            smtp_username=os.environ.get("SMTP_USERNAME", ""),
+            smtp_password=os.environ.get("SMTP_PASSWORD", ""),
+            smtp_from=os.environ.get("SMTP_FROM", "") or os.environ.get("SMTP_USERNAME", ""),
         )

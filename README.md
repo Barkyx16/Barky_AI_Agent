@@ -21,7 +21,7 @@ Boardroom gives anyone a private board of AI advisors. You bring a decision ("Sh
 - **Verdict card.** Headline, confidence ring, each advisor's vote, risks, first move, and an action plan.
 - **Never lose a meeting.** Meetings run on the server independently of the browser. Refresh, lose your connection or open a second tab, and the page catches up live.
 - **Print or save as PDF.** Clean, ink-friendly verdict printouts.
-- **Account control.** Change your password (which signs out other devices) or delete your account and all its data.
+- **Account control.** Reset a forgotten password by email, change your password (which signs out other devices) or delete your account and all its data.
 - **Plan tracking.** Check off steps; progress shows in the sidebar for every meeting.
 - **Follow-ups.** Reconvene the board on an earlier decision ("What if I wait six months?") with the earlier verdict as context.
 - **Shareable verdicts.** One click creates a public read-only link to the debate and verdict, with a sign-up call to action. Private background notes and progress are never shared.
@@ -64,6 +64,9 @@ docker run -p 8000:8000 -e ANTHROPIC_API_KEY=sk-ant-... -v boardroom-data:/data 
 | `STRIPE_WEBHOOK_SECRET` | — | Signing secret for `/api/billing/webhook`. |
 | `BOARDROOM_PUBLIC_URL` | request URL | Your site's public URL, used for Stripe redirects. |
 | `BOARDROOM_PRO_PRICE_LABEL` | `$12/month` | Price text shown in the upgrade dialog. |
+| `SMTP_HOST` / `SMTP_PORT` | — / `587` | Outgoing mail server. Enables "Forgot password?" (port 465 uses SSL, others use STARTTLS). |
+| `SMTP_USERNAME` / `SMTP_PASSWORD` | — | SMTP login. |
+| `SMTP_FROM` | `SMTP_USERNAME` | The "From" address on emails. |
 | `HOST` / `PORT` | `127.0.0.1` / `8000` | Where the server listens. |
 | `FORWARDED_ALLOW_IPS` | `127.0.0.1` | Behind a reverse proxy or load balancer, set this to the proxy's IP (or `*`) so rate limits see real client IPs. |
 
@@ -95,6 +98,7 @@ browser ──POST /api/meetings──▶ FastAPI ──▶ meeting.run_meeting(
 - `boardroom/engine.py`: the Claude engine (streaming, adaptive thinking, web search, server-side refusal fallbacks) and the demo engine.
 - `boardroom/meeting.py`: runs the rounds and merges advisor streams into one event feed.
 - `boardroom/hub.py`: runs each meeting as a background task with a replayable event log, so viewers can attach and detach freely.
+- `boardroom/mailer.py`: SMTP email for password resets.
 - `boardroom/billing.py`: Stripe Checkout, customer portal, and webhook signature checks.
 - `boardroom/app.py`: API, auth (with login throttling), quotas, share links, and security headers.
 - `boardroom/static/`: the single-page front end, in plain HTML, CSS, and JS.
@@ -108,6 +112,6 @@ python -m pytest
 
 ## Roadmap to revenue
 
-1. Password reset by email, and email verification.
+1. Email verification.
 2. Reminder emails for plan steps and the review date.
 3. Saved custom boards: reusable guest lineups per user.

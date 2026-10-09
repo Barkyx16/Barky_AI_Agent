@@ -184,12 +184,14 @@ function renderLanding(tab = "signup") {
             <p class="error-text" id="auth-error"></p>
             <button class="btn btn-primary btn-block" type="submit">${tab === "signup" ? "Create free account" : "Sign in"}</button>
           </form>
+          ${tab === "login" && state.config.password_reset ? `<p class="fine"><button class="link" id="forgot" type="button">Forgot your password?</button></p>` : ""}
           <p class="fine">${state.config.free_daily_limit} free meetings a day. No card needed.${state.config.demo ? " Running in demo mode." : ""}</p>
         </div>
       </section>
     </div>`;
   applyStyles($app);
   $app.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => renderLanding(b.dataset.tab)));
+  document.getElementById("forgot")?.addEventListener("click", renderForgot);
   const form = document.getElementById("auth-form");
   form.querySelector("input").focus();
   form.addEventListener("submit", async (e) => {
@@ -204,6 +206,69 @@ function renderLanding(tab = "signup") {
       await enterApp();
     } catch (err) {
       errEl.textContent = err.message;
+      btn.disabled = false;
+    }
+  });
+}
+
+function authFrame(title, sub, inner) {
+  $app.innerHTML = `
+    <div class="landing single">
+      <section class="landing-auth">
+        <div class="auth-card">
+          <a class="brand" href="/"><img src="/static/favicon.svg" alt=""> Boardroom</a>
+          <h2 class="spaced">${title}</h2>
+          <p class="sub">${sub}</p>
+          ${inner}
+        </div>
+      </section>
+    </div>`;
+}
+
+function renderForgot() {
+  authFrame("Reset your password", "Enter your account email and we'll send you a link to choose a new password.", `
+    <form id="forgot-form" novalidate>
+      <div class="field"><label for="email">Email</label><input class="input" id="email" type="email" autocomplete="email" required></div>
+      <p class="error-text" id="auth-error"></p>
+      <button class="btn btn-primary btn-block" type="submit">Send reset link</button>
+    </form>
+    <p class="fine"><a href="/#/login">Back to sign in</a></p>`);
+  const form = document.getElementById("forgot-form");
+  form.querySelector("input").focus();
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = form.querySelector("button");
+    btn.disabled = true;
+    try {
+      await api("/api/password/forgot", { method: "POST", body: { email: form.querySelector("#email").value } });
+      form.outerHTML = `<div class="notice">If an account exists for that email, a reset link is on its way. It expires in an hour.</div>`;
+    } catch (err) {
+      document.getElementById("auth-error").textContent = err.message;
+      btn.disabled = false;
+    }
+  });
+}
+
+function renderReset(token) {
+  authFrame("Choose a new password", "Pick something at least 8 characters long.", `
+    <form id="reset-form" novalidate>
+      <div class="field"><label for="password">New password</label><input class="input" id="password" type="password" autocomplete="new-password" minlength="8" required></div>
+      <p class="error-text" id="auth-error"></p>
+      <button class="btn btn-primary btn-block" type="submit">Save and sign in</button>
+    </form>`);
+  const form = document.getElementById("reset-form");
+  form.querySelector("input").focus();
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = form.querySelector("button");
+    btn.disabled = true;
+    try {
+      state.user = await api("/api/password/reset", { method: "POST", body: { token, password: form.querySelector("#password").value } });
+      history.replaceState(null, "", "#/new");
+      await enterApp();
+      toast("Password updated. You're signed in.");
+    } catch (err) {
+      document.getElementById("auth-error").textContent = err.message;
       btn.disabled = false;
     }
   });
@@ -419,6 +484,12 @@ function route() {
 
 window.addEventListener("hashchange", () => {
   if (/^#\/s\//.test(location.hash) || document.querySelector(".public")) { location.reload(); return; }
+  if (!state.user) {
+    const reset = location.hash.match(/^#\/reset\/([\w-]+)/);
+    if (reset) renderReset(reset[1]);
+    else renderLanding(location.hash === "#/login" ? "login" : "signup");
+    return;
+  }
   route();
 });
 
@@ -1027,6 +1098,8 @@ async function boot() {
     return;
   }
   if (shared) { renderShared(shared[1]); return; }
+  const reset = location.hash.match(/^#\/reset\/([\w-]+)/);
+  if (reset) { renderReset(reset[1]); return; }
   try {
     state.user = await api("/api/me");
   } catch (_) {

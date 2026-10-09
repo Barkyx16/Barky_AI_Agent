@@ -562,3 +562,63 @@ def test_delete_account_removes_everything(tmp_path):
         assert c.execute("SELECT COUNT(*) FROM meetings").fetchone()[0] == 0
         assert c.execute("SELECT COUNT(*) FROM steps").fetchone()[0] == 0
     signup(client)  # the email is free again
+
+
+# ---- password reset -------------------------------------------------------
+
+
+class FakeMailer:
+    def __init__(self):
+        self.sent = []
+
+    def send(self, to, subject, body):
+        self.sent.append((to, subject, body))
+
+
+def reset_client(tmp_path):
+    mailer = FakeMailer()
+    app = create_app(settings(tmp_path, public_url="https://boardroom.app"), engine=DemoEngine(delay=0), mailer=mailer)
+    return TestClient(app), mailer
+
+
+def test_password_reset_flow(tmp_path):
+    client, mailer = reset_client(tmp_path)
+    assert client.get("/api/config").json()["password_reset"] is True
+    signup(client)
+    other = TestClient(client.app)
+    other.post("/api/login", json={"email": "ada@example.com", "password": "correct horse"})
+    client.post("/api/logout")
+
+    # Unknown emails get the same answer and no email.
+    assert client.post("/api/password/forgot", json={"email": "nobody@example.com"}).json() == {"ok": True}
+    assert mailer.sent == []
+
+    assert client.post("/api/password/forgot", json={"email": "ADA@example.com"}).status_code == 200
+    to, subject, body = mailer.sent[-1]
+    assert to == "ada@example.com" and "Reset" in subject
+    token = body.split("/#/reset/")[1].split()[0]
+
+    assert client.post("/api/password/reset", json={"token": "x" * 20, "password": "brand new pw"}).status_code == 400
+    r = client.post("/api/password/reset", json={"token": token, "password": "brand new pw"})
+    assert r.status_code == 200 and r.json()["name"] == "Ada"
+    assert client.get("/api/me").status_code == 200          # signed in on this device
+    assert other.get("/api/me").status_code == 401            # everywhere else signed out
+    assert client.post("/api/password/reset", json={"token": token, "password": "again again"}).status_code == 400  # single use
+    client.post("/api/logout")
+    assert client.post("/api/login", json={"email": "ada@example.com", "password": "brand new pw"}).status_code == 200
+
+
+def test_reset_tokens_expire(tmp_path):
+    client, mailer = reset_client(tmp_path)
+    signup(client)
+    client.post("/api/password/forgot", json={"email": "ada@example.com"})
+    token = mailer.sent[-1][2].split("/#/reset/")[1].split()[0]
+    with client.app.state.db.conn() as c:
+        c.execute("UPDATE password_resets SET expires_at = '2000-01-01T00:00:00+00:00'")
+    assert client.post("/api/password/reset", json={"token": token, "password": "brand new pw"}).status_code == 400
+
+
+def test_reset_disabled_without_smtp(tmp_path):
+    client = make_client(tmp_path)
+    assert client.get("/api/config").json()["password_reset"] is False
+    assert client.post("/api/password/forgot", json={"email": "a@example.com"}).status_code == 404

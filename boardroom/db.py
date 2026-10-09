@@ -23,6 +23,11 @@ CREATE TABLE IF NOT EXISTS sessions (
     user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     expires_at  TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS password_resets (
+    token_hash  TEXT PRIMARY KEY,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    expires_at  TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS meetings (
     id          INTEGER PRIMARY KEY,
     user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -137,6 +142,28 @@ class Database:
     def delete_other_sessions(self, user_id: int, keep_token: str) -> None:
         with self.conn() as c:
             c.execute("DELETE FROM sessions WHERE user_id = ? AND token != ?", (user_id, keep_token))
+
+    def create_reset(self, token_hash: str, user_id: int, expires_at: str) -> None:
+        with self.conn() as c:
+            c.execute("DELETE FROM password_resets WHERE user_id = ?", (user_id,))
+            c.execute(
+                "INSERT INTO password_resets (token_hash, user_id, expires_at) VALUES (?, ?, ?)",
+                (token_hash, user_id, expires_at),
+            )
+
+    def consume_reset(self, token_hash: str) -> int | None:
+        """Return the user id for a valid reset token and invalidate it."""
+        with self.conn() as c:
+            row = c.execute(
+                "SELECT user_id FROM password_resets WHERE token_hash = ? AND expires_at > ?",
+                (token_hash, now_iso()),
+            ).fetchone()
+            c.execute("DELETE FROM password_resets WHERE token_hash = ?", (token_hash,))
+            return int(row["user_id"]) if row else None
+
+    def delete_all_sessions(self, user_id: int) -> None:
+        with self.conn() as c:
+            c.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
 
     def delete_user(self, user_id: int) -> None:
         with self.conn() as c:
