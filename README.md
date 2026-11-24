@@ -40,9 +40,10 @@ Boardroom gives anyone a private board of AI advisors. You bring a decision ("Sh
 - **Installable.** Add Boardroom to a phone's home screen and it opens like a native app (web app manifest and icons).
 - **Polished UI.** Responsive from phone to desktop, light and dark themes, keyboard shortcuts (⌘/Ctrl+Enter), and no build step.
 - **Designed to feel premium.** Self-hosted Inter and Newsreader fonts (identical on every device), an animated boardroom scene on the landing page, glass headers, depth and soft light, a glow on whichever advisor is speaking, and a verdict that reveals with a filling confidence ring and growing option bars. All motion respects "reduce motion".
-- **A complete landing page.** Animated hero, a visual "How it works", a Free vs Pro pricing table generated from your actual limits and price, a final call to action, and a footer.
+- **A complete landing page.** Animated hero, a visual "How it works", a Free vs Pro pricing table generated from your actual limits and price, an FAQ, a final call to action, and a footer.
 - **Advisor identities.** Each advisor has its own glyph (magnifier, shield, compass, checklist, gavel), and live meetings show a progress stepper (Opening remarks → Rebuttals → Verdict).
 - **Delightful details.** A three-step welcome tour for new accounts, a question box that types out example questions, long remarks folded behind "Read more", confetti when a plan is finished, and a sidebar grouped by Today / Yesterday / Previous 7 days.
+- **Native sharing.** On phones, "Share…" opens the system share sheet with the verdict image attached. If you switch tabs mid-meeting, the tab title tells you when the verdict is ready.
 - **Pinned meetings.** Star the decisions you're actively working on and they stay in a Pinned group at the top of the sidebar.
 - **Make it yours.** Five accent themes (Gold, Sapphire, Emerald, Rose, Violet) in Settings or the ⌘K palette, each contrast-checked in light and dark.
 - **Keyboard first.** `?` shows every shortcut: `N` new meeting, `/` search, `T` theme, plus the ⌘K palette. A slim sticky bar keeps the question in view while you scroll a long meeting.

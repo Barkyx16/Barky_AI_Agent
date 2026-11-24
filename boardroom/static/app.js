@@ -407,6 +407,19 @@ function marketingSections() {
         </article>
       </div>
     </section>` : ""}
+    <section class="lp-section lp-faq" aria-labelledby="faq-title">
+      <p class="lp-kicker">Questions</p>
+      <h2 id="faq-title">Good questions, straight answers.</h2>
+      <div class="faq">
+        ${[
+          ["Is this real advice?", "Boardroom gives you AI-generated perspectives to think with, not professional advice. For big medical, legal or financial decisions, the board will tell you when to bring in a qualified professional, and you should."],
+          ["Who are the advisors?", "AI models, each given one job: the Analyst checks facts (and can search the web), the Skeptic hunts for risks, the Strategist finds better options, and the Operator turns it into a plan. The Chair weighs them and makes the call."],
+          ["Is what I share private?", "Your meetings are private unless you create a share link, and you can turn a link off anytime. We don't sell your data. Your questions are processed by our AI provider to generate answers, and you can download or delete everything from Settings."],
+          ["Does it work in my language?", "Yes. Write your question in any language and the board answers in it."],
+          ...(showPricing ? [["What does it cost?", `The free plan includes ${Number(L.free_daily_meetings)} meetings a day and a free deep debate each week. Pro is ${esc(state.config.pro_price)} and you can cancel anytime.`]] : []),
+        ].map(([q, a]) => `<details class="faq-item"><summary>${q}<span class="chev" aria-hidden="true"></span></summary><p>${a}</p></details>`).join("")}
+      </div>
+    </section>
     <section class="lp-section lp-final">
       <h2>What's the decision you keep putting off?</h2>
       <p>Bring it to the board. Your first meeting takes about a minute.</p>
@@ -617,9 +630,10 @@ function renderHistory() {
     const meta = m.status === "done"
       ? `<span class="mini-bar"><i data-w="${pct}"></i></span><span>${m.done_steps}/${m.total_steps}</span>${m.outcome ? `<span class="out out-${esc(m.outcome)}">${esc((OUTCOMES.find(([k]) => k === m.outcome) || ["", ""])[1])}</span>` : isDue(m.review_at) ? '<span class="due">Review due</span>' : ""}`
       : `<span>${m.status === "running" ? "In session" : "Unfinished"}</span>`;
-    return `<a href="#/m/${m.id}" ${state.meetingId === m.id ? 'aria-current="page"' : ""} ${m.headline ? `title="${esc(m.headline)}"` : ""}>
+    return `<div class="h-item"><a href="#/m/${m.id}" ${state.meetingId === m.id ? 'aria-current="page"' : ""} ${m.headline ? `title="${esc(m.headline)}"` : ""}>
       <div class="q">${m.pinned ? `<span class="pin-mark" aria-label="Pinned">${ICON.star}</span>` : ""}${esc(m.question)}</div>
-      <div class="meta"><span>${timeAgo(m.created_at)}</span>${meta}</div></a>`;
+      <div class="meta"><span>${timeAgo(m.created_at)}</span>${meta}</div></a>
+      <button type="button" class="h-pin ${m.pinned ? "is-on" : ""}" data-pin="${m.id}" aria-pressed="${!!m.pinned}" aria-label="${m.pinned ? "Unpin" : "Pin"}: ${esc(m.question)}">${ICON.star}</button></div>`;
   };
   if (q) {
     el.innerHTML = `<h2>${shown.length} found</h2>` + shown.map(item).join("");
@@ -643,6 +657,18 @@ function renderHistory() {
     el.innerHTML = html;
   }
   applyStyles(el);
+  el.querySelectorAll("[data-pin]").forEach((b) => b.addEventListener("click", async (e) => {
+    e.preventDefault();
+    const id = Number(b.dataset.pin), on = b.getAttribute("aria-pressed") !== "true";
+    try {
+      await api(`/api/meetings/${id}/pin`, { method: "PATCH", body: { pinned: on } });
+      const m = state.meetings.find((x) => x.id === id);
+      if (m) m.pinned = on;
+      renderHistory();
+      const tool = document.querySelector('[data-act="pin"]');
+      if (tool && state.meetingId === id) { tool.classList.toggle("is-on", on); tool.setAttribute("aria-pressed", String(on)); }
+    } catch (err) { toast(err.message); }
+  }));
 }
 
 function renderAccount() {
@@ -834,7 +860,9 @@ function route() {
   const go = () => routeNow();
   // Smooth cross-fade between screens where the browser supports View Transitions.
   if (document.startViewTransition && !matchMedia("(prefers-reduced-motion: reduce)").matches && document.getElementById("view")) {
-    document.startViewTransition(go);
+    const t = document.startViewTransition(go);
+    // A newer navigation can cancel this one; that's expected, not an error.
+    for (const done of [t.ready, t.finished, t.updateCallbackDone]) done?.catch(() => {});
   } else {
     go();
   }
@@ -1163,6 +1191,7 @@ function handleEvent(live, ev) {
     case "verdict":
       live.verdict = ev.verdict;
       live.chair = "done";
+      tabAlert("✓ Verdict ready");
       if (state.meetingId === live.id) requestAnimationFrame(() => requestAnimationFrame(verdictPill));
       break;
     case "done":
@@ -1206,6 +1235,7 @@ function renderLive() {
     view.dataset.layout = layoutKey;
     applyStyles(view);
     animateNew(view);
+    countFresh(view);
     clampLong(view);
     bindMeetingActions(view, live);
     return;
@@ -1474,7 +1504,7 @@ function verdictCard(v, steps, readonly = false, guest = null, reviewAt = null, 
         <h2>${esc(v.headline)}</h2>
         <p class="why">${esc(v.verdict)}</p>
       </div>
-      <div class="ring" data-p="${Number(v.confidence)}" role="img" aria-label="Confidence ${Number(v.confidence)} percent"><div><div><strong>${Number(v.confidence)}%</strong><span>confidence</span></div></div></div>
+      <div class="ring" data-p="${Number(v.confidence)}" role="img" aria-label="Confidence ${Number(v.confidence)} percent"><div><div><strong data-count="${Number(v.confidence)}">${Number(v.confidence)}%</strong><span>confidence</span></div></div></div>
     </div>
     <div class="votes">${v.votes.map((x) => {
       const a = by[x.advisor];
@@ -1663,7 +1693,7 @@ function updatePlanProgress(view, steps) {
 
 async function loadMeeting(id) {
   const view = document.getElementById("view");
-  view.innerHTML = `<div class="boot"><div class="spinner"></div></div>`;
+  view.innerHTML = meetingSkeleton();
   delete view.dataset.layout;
   let m;
   try {
@@ -1693,6 +1723,7 @@ async function loadMeeting(id) {
     + (stalled ? errorBox(m.status === "running" ? "This meeting is still in session. Refresh in a moment to see the result." : "This meeting didn't finish.") : "");
   applyStyles(view);
   animateNew(view);
+  countFresh(view);
   clampLong(view);
   bindMeetingActions(view, m);
 }
@@ -1715,6 +1746,7 @@ function showShare(m, button) {
         <h2 id="sh-title">Share this verdict</h2>
         <p class="fine left">Anyone with the link can read the debate and verdict. Your background notes and progress stay private.</p>
         <div class="row-gap"><label class="sr-only" for="share-link">Share link</label><input class="input" id="share-link" readonly value="${esc(linkFor(m.share_token))}"><button class="btn btn-primary" id="share-copy">Copy</button></div>
+        ${navigator.share ? `<button class="btn btn-block native-share" id="share-native">${ICON.share} Share…</button>` : ""}
         <div class="actions"><button class="btn btn-ghost" id="share-stop">Stop sharing</button><button class="btn" id="share-done">Done</button></div>
       </div>` : `
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="sh-title">
@@ -1728,6 +1760,17 @@ function showShare(m, button) {
         const { token } = await api(`/api/meetings/${m.id}/share`, { method: "POST" });
         m.share_token = token; markShared(button, true); paint();
       } catch (err) { toast(err.message); }
+    });
+    back.querySelector("#share-native")?.addEventListener("click", async () => {
+      const url = linkFor(m.share_token);
+      const data = { title: "The board's verdict", text: m.verdict?.headline ? `“${m.question}” — ${m.verdict.headline}` : m.question, url };
+      try {
+        // Attach the verdict image where the platform can share files.
+        const res = await fetch(`/api/meetings/${m.id}/card.png`, { credentials: "same-origin" });
+        const file = new File([await res.blob()], "boardroom-verdict.png", { type: "image/png" });
+        if (navigator.canShare?.({ files: [file] })) data.files = [file];
+      } catch (_) { /* share the link alone */ }
+      try { await navigator.share(data); } catch (err) { if (err.name !== "AbortError") toast("Sharing didn't work here. Copy the link instead."); }
     });
     back.querySelector("#share-copy")?.addEventListener("click", async () => {
       const input = back.querySelector("#share-link");
@@ -1832,7 +1875,8 @@ function sparkline(values, label) {
 }
 
 function statTile(label, value, sub = "", hero = false, spark = "") {
-  return `<div class="stat ${hero ? "hero" : ""}"><div class="label">${esc(label)}</div><div class="value">${esc(value)}</div>${sub ? `<div class="sub">${esc(sub)}</div>` : ""}${spark}</div>`;
+  const num = Number(String(value).replace(/[^\d.-]/g, ""));
+  return `<div class="stat ${hero ? "hero" : ""}"><div class="label">${esc(label)}</div><div class="value" ${Number.isFinite(num) && num > 0 ? `data-count="${num}"` : ""}>${esc(value)}</div>${sub ? `<div class="sub">${esc(sub)}</div>` : ""}${spark}</div>`;
 }
 
 async function renderAdmin() {
@@ -1874,6 +1918,7 @@ async function renderAdmin() {
       <tbody>${st.daily.slice().reverse().map((d) => `<tr><td>${esc(fmtDay(d.date))}</td><td>${fmtInt(d.signups)}</td><td>${fmtInt(d.meetings)}</td><td>${fmtUsd(d.cost_usd, 3)}</td></tr>`).join("")}</tbody></table>
     </details>`;
   bindChart(view.querySelector("#ch-meetings"), st.daily, "meetings", fmtInt, "meetings");
+  countUp(view);
   bindChart(view.querySelector("#ch-cost"), st.daily, "cost_usd", (v) => fmtUsd(v, 3), "API cost");
 }
 
@@ -1915,7 +1960,52 @@ async function renderShared(token, sample = false) {
     </div>`;
   applyStyles($app);
   animateNew($app);
+  countFresh($app);
   clampLong($app);
+}
+
+function meetingSkeleton() {
+  const card = `<div class="card sk-card"><div class="sk-row"><i class="sk sk-av"></i><div><i class="sk sk-line w40"></i><i class="sk sk-line w25"></i></div></div><i class="sk sk-line"></i><i class="sk sk-line w90"></i><i class="sk sk-line w70"></i></div>`;
+  return `<div class="sk-page" aria-busy="true" aria-label="Loading meeting"><i class="sk sk-line w20"></i><i class="sk sk-title"></i><i class="sk sk-title w60"></i>
+    <div class="grid sk-grid">${card.repeat(4)}</div></div>`;
+}
+
+/* If the verdict lands while you're in another tab, say so in the tab title. */
+function tabAlert(text) {
+  if (!document.hidden) return;
+  const original = document.title;
+  document.title = `${text} · Boardroom`;
+  const restore = () => { if (!document.hidden) { document.title = original; document.removeEventListener("visibilitychange", restore); } };
+  document.addEventListener("visibilitychange", restore);
+}
+
+/* Numbers that count up into place. */
+function countUp(root) {
+  if (reducedMotion()) return;
+  root.querySelectorAll("[data-count]").forEach((el) => {
+    if (el.dataset.counted) return;
+    el.dataset.counted = "1";
+    const target = Number(el.dataset.count), final = el.textContent;
+    if (!Number.isFinite(target) || target <= 0) return;
+    const fmt = (v) => final.replace(/[\d,]+(\.\d+)?/, (num) => {
+      const decimals = (num.split(".")[1] || "").length;
+      return v.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+    });
+    const start = performance.now(), dur = 900;
+    const tick = (t) => {
+      const k = Math.min(1, (t - start) / dur), eased = 1 - Math.pow(1 - k, 3);
+      el.textContent = k < 1 ? fmt(target * eased) : final;
+      if (k < 1) requestAnimationFrame(tick);
+    };
+    el.textContent = fmt(0);
+    requestAnimationFrame(tick);
+  });
+}
+
+/* Count up only on a verdict's first appearance, not when the view re-renders. */
+function countFresh(root) {
+  const v = root.querySelector(".verdict.enter");
+  if (v && (v.style.getPropertyValue("--since") || "0ms") === "0ms") countUp(v);
 }
 
 /* ---------- delight & polish --------------------------------------------- */

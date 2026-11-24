@@ -990,6 +990,44 @@ a:hover > .arr, button:hover > .arr { transform: translateX(3px); }
 @keyframes boot-breathe { 50% { transform: scale(1.05); filter: drop-shadow(0 8px 22px rgba(201, 169, 110, .35)); } }
 @media (prefers-reduced-motion: reduce) { .landing-hero h1 .hl { animation: none; } }
 
+/* ========================================================================
+   Pass 8: share, skeletons, FAQ, sidebar quick pin
+   ======================================================================== */
+.native-share { margin-top: 10px; gap: 8px; }
+
+/* Skeleton meeting while loading */
+.sk { display: block; border-radius: 8px; background: linear-gradient(90deg, var(--bg-sunk) 0%, color-mix(in srgb, var(--bg-sunk) 50%, var(--bg-elev)) 45%, var(--bg-sunk) 90%); background-size: 220% 100%; animation: shimmer 1.4s linear infinite; }
+.sk-page { padding-top: 8px; }
+.sk-line { height: 11px; margin: 9px 0; width: 100%; }
+.sk-title { height: 30px; margin: 10px 0; width: 75%; }
+.w20 { width: 20%; } .w25 { width: 25%; } .w40 { width: 40%; } .w60 { width: 60%; } .w70 { width: 70%; } .w90 { width: 90%; }
+.sk-grid { margin-top: 34px; }
+.sk-card { min-height: 170px; }
+.sk-row { display: flex; gap: 12px; align-items: center; margin-bottom: 14px; }
+.sk-row > div { flex: 1; }
+.sk-av { width: 38px; height: 38px; border-radius: 50%; }
+
+/* FAQ */
+.faq { max-width: 760px; margin: 40px auto 0; text-align: left; display: grid; gap: 10px; }
+.faq-item { background: var(--bg-elev); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; }
+.faq-item summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 20px; font-weight: 600; font-size: 16px; }
+.faq-item summary::-webkit-details-marker { display: none; }
+.faq-item .chev { width: 10px; height: 10px; border-right: 2px solid var(--text-3); border-bottom: 2px solid var(--text-3); transform: rotate(45deg) translateY(-3px); transition: transform .25s var(--ease); flex: none; }
+.faq-item[open] .chev { transform: rotate(-135deg) translateY(-1px); }
+.faq-item p { margin: 0; padding: 0 20px 18px; color: var(--text-2); }
+.faq-item[open] p { animation: rise .3s var(--ease) both; }
+
+/* Sidebar quick pin */
+.h-item { position: relative; }
+.h-item > a { padding-right: 34px; }
+.h-pin { position: absolute; top: 8px; right: 6px; width: 26px; height: 26px; display: grid; place-items: center; border: 0; border-radius: 7px; background: transparent; color: var(--text-3); cursor: pointer; opacity: 0; transition: opacity .15s, background .15s, color .15s; }
+.h-pin svg { width: 14px; height: 14px; }
+.h-item:hover .h-pin, .h-pin:focus-visible { opacity: 1; }
+.h-pin:hover { background: var(--bg-sunk); color: var(--text); }
+.h-pin.is-on { color: var(--accent); }
+.h-pin.is-on svg { fill: currentColor; }
+@media (hover: none) { .h-pin { display: none; } }
+
 /* Responsive ------------------------------------------------------------- */
 @media (max-width: 980px) {
   .landing { grid-template-columns: 1fr; }
