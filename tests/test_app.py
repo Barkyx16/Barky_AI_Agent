@@ -570,9 +570,11 @@ def test_delete_account_removes_everything(tmp_path):
 class FakeMailer:
     def __init__(self):
         self.sent = []
+        self.headers = []
 
-    def send(self, to, subject, body):
+    def send(self, to, subject, body, headers=None):
         self.sent.append((to, subject, body))
+        self.headers.append(headers or {})
 
 
 def reset_client(tmp_path):
@@ -1249,3 +1251,53 @@ def test_weekly_digest_opt_out(tmp_path):
     assert client.get("/api/me").json()["digest_emails"] is False
     assert client.get("/api/me").json()["remind_emails"] is True  # untouched
     assert client.app.state.send_weekly_digests(datetime.now(timezone.utc) + timedelta(days=8)) == 0
+
+
+# ---- unsubscribe links --------------------------------------------------------
+
+
+def test_unsubscribe_links_in_emails(tmp_path):
+    from datetime import date, datetime, timedelta, timezone
+
+    client, mailer = reset_client(tmp_path)
+    signup(client)
+    events(client.post("/api/meetings", json={"question": "Unsubscribe me"}))
+    assert client.app.state.send_weekly_digests(datetime.now(timezone.utc) + timedelta(days=8)) == 1
+    body, headers = mailer.sent[-1][2], mailer.headers[-1]
+    link = body.split("Stop these weekly emails: ")[1].split()[0]
+    assert link.startswith("https://boardroom.app/unsubscribe/")
+    assert headers["List-Unsubscribe"] == f"<{link}>"
+    assert headers["List-Unsubscribe-Post"] == "List-Unsubscribe=One-Click"
+    path = link.replace("https://boardroom.app", "")
+
+    client.post("/api/logout")  # works without signing in
+    page = client.get(path)
+    assert page.status_code == 200 and "weekly digest" in page.text and "<form" in page.text
+    assert client.app.state.db.user_by_email("ada@example.com")["digest_emails"] == 1  # GET doesn't act
+    done = client.post(path, data={"List-Unsubscribe": "One-Click"})
+    assert done.status_code == 200 and "unsubscribed" in done.text
+    user = client.app.state.db.user_by_email("ada@example.com")
+    assert user["digest_emails"] == 0 and user["remind_emails"] == 1
+
+    # Reminder emails carry their own link.
+    with client.app.state.db.conn() as c:
+        c.execute("UPDATE meetings SET review_at = ?", (date.today().isoformat(),))
+    client.app.state.send_review_reminders()
+    assert "/unsubscribe/" in mailer.sent[-1][2] and ".reminders." in mailer.headers[-1]["List-Unsubscribe"]
+
+
+def test_unsubscribe_tokens_cannot_be_forged(tmp_path):
+    client, _ = reset_client(tmp_path)
+    signup(client)
+    for bad in ["1.digest.0000", "1.everything.abc", "nonsense", "2.digest.deadbeefdeadbeefdeadbeefdeadbeef"]:
+        assert client.post(f"/unsubscribe/{bad}").status_code == 400
+        assert "isn't valid" in client.get(f"/unsubscribe/{bad}").text
+    assert client.app.state.db.user_by_email("ada@example.com")["digest_emails"] == 1
+
+
+def test_secret_key_persists_across_restarts(tmp_path):
+    from boardroom.db import Database
+
+    db = Database(str(tmp_path / "k.db"))
+    first = db.secret_key()
+    assert len(first) == 64 and Database(str(tmp_path / "k.db")).secret_key() == first

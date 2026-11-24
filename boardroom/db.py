@@ -25,6 +25,10 @@ CREATE TABLE IF NOT EXISTS sessions (
     user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     expires_at  TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS app_settings (
+    key         TEXT PRIMARY KEY,
+    value       TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS quota_log (
     id          INTEGER PRIMARY KEY,
     user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -270,7 +274,7 @@ class Database:
     def due_reviews(self, today: str) -> list[dict[str, Any]]:
         with self.conn() as c:
             rows = c.execute(
-                "SELECT m.id, m.question, m.verdict, u.email, u.name FROM meetings m "
+                "SELECT m.id, m.question, m.verdict, u.id AS user_id, u.email, u.name FROM meetings m "
                 "JOIN users u ON u.id = m.user_id "
                 "WHERE m.status = 'done' AND m.reminded = 0 AND m.review_at IS NOT NULL "
                 "AND m.review_at <= ? AND u.remind_emails = 1 ORDER BY m.id",
@@ -278,7 +282,7 @@ class Database:
             ).fetchall()
         return [
             {
-                "id": r["id"], "question": r["question"], "email": r["email"], "name": r["name"],
+                "id": r["id"], "user_id": r["user_id"], "question": r["question"], "email": r["email"], "name": r["name"],
                 "headline": (json.loads(r["verdict"]) or {}).get("headline", "") if r["verdict"] else "",
             }
             for r in rows
@@ -517,6 +521,15 @@ class Database:
         c.execute("DELETE FROM quota_log WHERE id = ?", (row["id"],))
         if row["bonus"]:
             c.execute("UPDATE users SET bonus_meetings = bonus_meetings + 1 WHERE id = ?", (row["user_id"],))
+
+    def secret_key(self) -> str:
+        """A random server secret, created once and kept in the database."""
+        with self.conn() as c:
+            c.execute(
+                "INSERT OR IGNORE INTO app_settings (key, value) VALUES ('secret_key', ?)",
+                (secrets.token_hex(32),),
+            )
+            return c.execute("SELECT value FROM app_settings WHERE key = 'secret_key'").fetchone()[0]
 
     def interrupt_running(self) -> None:
         with self.conn() as c:

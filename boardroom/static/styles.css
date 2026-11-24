@@ -464,6 +464,10 @@ button, input, textarea { font: inherit; color: inherit; }
 .legal-links { font-size: 13px; color: var(--text-3); margin-top: 18px; }
 .modal .actions .legal-links { margin: 0 auto 0 0; align-self: center; }
 
+.unsub { padding-top: 48px; }
+.unsub h1 { font-size: 32px; margin-bottom: 14px; }
+.unsub p { color: var(--text-2); }
+
 /* Toast ------------------------------------------------------------------ */
 #toast {
   position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); opacity: 0;

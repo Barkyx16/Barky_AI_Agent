@@ -13,11 +13,13 @@ class Mailer:
         self.username, self.password = username, password
         self.sender = sender
 
-    def send(self, to: str, subject: str, body: str) -> None:
+    def send(self, to: str, subject: str, body: str, headers: dict[str, str] | None = None) -> None:
         msg = EmailMessage()
         msg["From"] = self.sender
         msg["To"] = to
         msg["Subject"] = " ".join(subject.split())  # header values can't contain newlines
+        for name, value in (headers or {}).items():
+            msg[name] = value
         msg.set_content(body)
         context = ssl.create_default_context()
         if self.port == 465:

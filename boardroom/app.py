@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import hmac
 import html
 import json
 import logging
@@ -144,6 +145,28 @@ def create_app(
     demo = engine.name == "demo"
 
     hub = MeetingHub()
+    secret = (settings.secret_key or db.secret_key()).encode()
+
+    EMAIL_KINDS = {"reminders": ("review reminders", db.set_remind_emails), "digest": ("the weekly digest", db.set_digest_emails)}
+
+    def unsubscribe_token(user_id: int, kind: str) -> str:
+        sig = hmac.new(secret, f"unsubscribe:{user_id}:{kind}".encode(), hashlib.sha256).hexdigest()[:32]
+        return f"{user_id}.{kind}.{sig}"
+
+    def read_unsubscribe_token(token: str) -> tuple[int, str] | None:
+        try:
+            uid, kind, _ = token.split(".")
+            user_id = int(uid)
+        except ValueError:
+            return None
+        if kind not in EMAIL_KINDS or not hmac.compare_digest(token, unsubscribe_token(user_id, kind)):
+            return None
+        return user_id, kind
+
+    def unsubscribe_headers(user_id: int, kind: str) -> tuple[str, dict[str, str]]:
+        """The footer link and RFC 8058 one-click headers for a marketing-style email."""
+        url = f"{settings.public_url}/unsubscribe/{unsubscribe_token(user_id, kind)}"
+        return url, {"List-Unsubscribe": f"<{url}>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"}
     prices = Prices.from_env()
     # Meetings left "running" by a previous process can't resume.
     db.interrupt_running()
@@ -155,6 +178,7 @@ def create_app(
         sent = 0
         base = settings.public_url
         for due in db.due_reviews(datetime.now(timezone.utc).date().isoformat()):
+            unsub, headers = unsubscribe_headers(due["user_id"], "reminders")
             try:
                 mailer.send(
                     due["email"],
@@ -162,7 +186,8 @@ def create_app(
                     f"Hi {due['name']},\n\nYour board asked to check back on this decision today:\n\n"
                     f"  {due['question']}\n\nThe Chair's verdict was: {due['headline']}\n\n"
                     f"See how it's going and reconvene the board here:\n{base}/#/m/{due['id']}\n\n"
-                    "You can turn these reminders off in your account settings.\n",
+                    f"Stop these reminders: {unsub}\n",
+                    headers,
                 )
             except Exception:
                 log.exception("failed to send review reminder for meeting %s", due["id"])
@@ -190,9 +215,10 @@ def create_app(
                 lines.append("")
             lines.append("Small steps add up. Tick them off as you go, or tell the board how it turned out.")
             lines.append("")
-            lines.append("You can turn off this weekly email in your account settings.")
+            unsub, headers = unsubscribe_headers(u["id"], "digest")
+            lines.append(f"Stop these weekly emails: {unsub}")
             try:
-                mailer.send(u["email"], "Your week ahead with the board", "\n".join(lines))
+                mailer.send(u["email"], "Your week ahead with the board", "\n".join(lines), headers)
             except Exception:
                 log.exception("failed to send weekly digest to user %s", u["id"])
                 continue
@@ -740,6 +766,41 @@ def create_app(
             "Bring any hard decision to a private board of AI advisors. Watch them debate it "
             "live, then get a verdict and an action plan.",
             "/",
+        )
+
+    def unsubscribe_page(title: str, body_html: str) -> HTMLResponse:
+        return HTMLResponse(f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{html.escape(title)} · Boardroom</title><link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/styles.css"></head>
+<body><div class="public"><header class="public-bar"><a class="brand" href="/"><img src="/static/favicon.svg" alt=""> Boardroom</a></header>
+<main class="main"><div class="container narrow unsub"><h1>{html.escape(title)}</h1>{body_html}</div></main></div></body></html>""")
+
+    @app.get("/unsubscribe/{token}")
+    def unsubscribe_confirm(token: str):
+        found = read_unsubscribe_token(token)
+        if found is None:
+            return unsubscribe_page("Link not recognized", "<p>This unsubscribe link isn't valid. You can manage emails in your account settings.</p>")
+        label = EMAIL_KINDS[found[1]][0]
+        # A button rather than acting on GET, so email link scanners can't unsubscribe people.
+        return unsubscribe_page(
+            "Unsubscribe",
+            f"<p>Stop receiving {html.escape(label)} from Boardroom?</p>"
+            f'<form method="post" action="/unsubscribe/{html.escape(token)}"><button class="btn btn-primary" type="submit">Unsubscribe</button></form>',
+        )
+
+    @app.post("/unsubscribe/{token}")
+    def unsubscribe(token: str):
+        found = read_unsubscribe_token(token)
+        if found is None:
+            raise HTTPException(status_code=400, detail="Invalid unsubscribe link.")
+        user_id, kind = found
+        label, setter = EMAIL_KINDS[kind]
+        setter(user_id, False)
+        return unsubscribe_page(
+            "You're unsubscribed",
+            f"<p>You won't receive {html.escape(label)} anymore. You can turn them back on in your account settings.</p>"
+            '<p><a class="btn" href="/">Back to Boardroom</a></p>',
         )
 
     @app.get("/terms")

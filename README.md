@@ -25,6 +25,7 @@ Boardroom gives anyone a private board of AI advisors. You bring a decision ("Sh
 - **Print or save as PDF.** Clean, ink-friendly verdict printouts.
 - **Account control.** Reset a forgotten password by email, change your password (which signs out other devices) download all your data as JSON, or delete your account and all its data.
 - **Review dates and reminders.** The Chair sets a date to revisit each decision. On that date the sidebar flags it, "Hold a review" starts a follow-up meeting, and (with SMTP configured) the user gets an email reminder they can turn off in settings.
+- **One-click unsubscribe.** Reminder and digest emails include a signed unsubscribe link and the standard `List-Unsubscribe` / one-click headers that Gmail and Yahoo expect from bulk senders.
 - **Weekly digest.** With SMTP configured, users get a once-a-week email listing their open plan steps (up to three recent, undecided decisions) with links back. They can turn it off in settings.
 - **Outcomes.** Users mark how each decision turned out (went well, mixed, didn't work out) with a note. The sidebar shows it, and the owner dashboard reports the share of decisions that went well.
 - **Plan tracking.** Check off steps; progress shows in the sidebar for every meeting.
@@ -83,6 +84,7 @@ docker run -p 8000:8000 -e ANTHROPIC_API_KEY=sk-ant-... -v boardroom-data:/data 
 | `BOARDROOM_PRO_PRICE_USD` | `12` | Pro price as a number, for the revenue estimate. |
 | `BOARDROOM_PRICE_INPUT` / `_OUTPUT` / `_CACHE_WRITE` / `_CACHE_READ` | `4` / `20` / `5` / `0.20` | API prices in USD per million tokens, for cost tracking (Claude Opus 5.5 list prices). |
 | `BOARDROOM_PRICE_SEARCH` | `0.01` | Cost per web search. |
+| `BOARDROOM_SECRET_KEY` | generated | Signs unsubscribe links. Generated and stored in the database if unset. Set it to keep links valid if you ever rebuild the database. |
 | `BOARDROOM_COMPANY_NAME` | `Boardroom` | Legal name shown in the Terms and Privacy Policy. |
 | `BOARDROOM_CONTACT_EMAIL` | `support@example.com` | Contact address in the legal pages. **Set this before launch.** |
 | `BOARDROOM_LEGAL_UPDATED` | `October 9, 2026` | "Last updated" date on the legal pages. |
