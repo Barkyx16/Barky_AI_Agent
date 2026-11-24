@@ -1151,3 +1151,21 @@ p, li, .why { text-wrap: pretty; }
 .btn:active:not(:disabled) { transform: scale(.975); }
 
 .verdict, .section-title, .followup { scroll-margin-top: 84px; }
+
+/* ==========================================================================
+   Pass 12: circular theme reveal, toast timer, list keyboard focus
+   ========================================================================== */
+.theme-vt #view { view-transition-name: none; }
+.theme-vt::view-transition-old(root), .theme-vt::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+.theme-vt::view-transition-new(root) { z-index: 2; }
+
+#toast { overflow: hidden; }
+#toast::after {
+  content: ""; position: absolute; left: 16px; right: 16px; bottom: 5px; height: 2px; border-radius: 2px;
+  background: currentColor; opacity: .4; transform-origin: 0 50%; transform: scaleX(0);
+}
+#toast.show::after { animation: toast-timer 2.6s linear both; }
+#toast.show.toast-error::after { animation-duration: 4.2s; }
+@keyframes toast-timer { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+
+.h-item a:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--accent); border-radius: inherit; }

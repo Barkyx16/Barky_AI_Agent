@@ -200,15 +200,35 @@ function setAccent(key) {
 
 const currentAccent = () => document.documentElement.dataset.accent || "gold";
 
-function toggleTheme() {
+function toggleTheme(e) {
   const isDark = document.documentElement.dataset.theme
     ? document.documentElement.dataset.theme === "dark"
     : matchMedia("(prefers-color-scheme: dark)").matches;
-  setTheme(isDark ? "light" : "dark");
+  setTheme(isDark ? "light" : "dark", e?.currentTarget instanceof Element ? e.currentTarget : null);
 }
 
 /* "system" follows the device; "light"/"dark" pin it. */
-function setTheme(mode) {
+function setTheme(mode, from = null) {
+  // From a button: the new theme spreads out in a circle from where you clicked.
+  if (from && document.startViewTransition && !reducedMotion()) {
+    const r = from.getBoundingClientRect();
+    const x = r.left + r.width / 2, y = r.top + r.height / 2;
+    const radius = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+    const root = document.documentElement;
+    root.classList.add("theme-vt");
+    const t = document.startViewTransition(() => applyTheme(mode));
+    t.ready.then(() => root.animate(
+      { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`] },
+      { duration: 560, easing: "cubic-bezier(.22,.8,.24,1)", pseudoElement: "::view-transition-new(root)" },
+    )).catch(() => {});
+    t.updateCallbackDone.catch(() => applyTheme(mode));
+    t.finished.catch(() => {}).finally(() => root.classList.remove("theme-vt"));
+    return;
+  }
+  applyTheme(mode);
+}
+
+function applyTheme(mode) {
   if (mode === "system") delete document.documentElement.dataset.theme;
   else document.documentElement.dataset.theme = mode;
   try { if (mode === "system") localStorage.removeItem("theme"); else localStorage.setItem("theme", mode); } catch (_) { /* ignore */ }
@@ -653,6 +673,24 @@ function renderShell() {
   document.querySelector('[data-tab-nav="search"]').addEventListener("click", openPalette);
   document.querySelector('[data-tab-nav="you"]').addEventListener("click", showSettings);
   document.getElementById("search").addEventListener("input", (e) => { state.filter = e.target.value; renderHistory(); });
+  // Arrow keys move through the meetings list (and from the search box into it).
+  const links = () => [...document.querySelectorAll("#history .h-item a")];
+  document.getElementById("search").addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown" && links().length) { e.preventDefault(); links()[0].focus(); }
+  });
+  document.getElementById("history").addEventListener("keydown", (e) => {
+    const all = links(), i = all.indexOf(document.activeElement);
+    if (i < 0) return;
+    let next = null;
+    if (e.key === "ArrowDown") next = all[Math.min(i + 1, all.length - 1)];
+    else if (e.key === "ArrowUp") next = i === 0 ? document.getElementById("search") : all[i - 1];
+    else if (e.key === "Home") next = all[0];
+    else if (e.key === "End") next = all[all.length - 1];
+    if (!next) return;
+    e.preventDefault();
+    next.focus();
+    next.scrollIntoView({ block: "nearest" });
+  });
   renderHistory();
   renderAccount();
 }
@@ -866,7 +904,7 @@ function showSettings() {
       } catch (err) { e.target.checked = !on; toast(err.message); }
     });
   }
-  back.querySelectorAll("[data-theme-opt]").forEach((b) => b.addEventListener("click", () => setTheme(b.dataset.themeOpt)));
+  back.querySelectorAll("[data-theme-opt]").forEach((b) => b.addEventListener("click", () => setTheme(b.dataset.themeOpt, b)));
   back.querySelectorAll("[data-swatch]").forEach((b) => {
     b.style.setProperty("--sw", b.dataset.c);
     b.addEventListener("click", () => setAccent(b.dataset.swatch));
