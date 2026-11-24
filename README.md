@@ -4,6 +4,8 @@
 
 Boardroom gives anyone a private board of AI advisors. You bring a decision ("Should I quit my job to go full-time on my side business?"). Four specialists debate it live on screen, each in their own panel. Then the Chair makes the call: a verdict, a confidence score, the risks to watch, your first move for the next 24 hours, and an action plan you can tick off.
 
+![Four advisors debating a question live, each streaming in their own panel](docs/screenshots/debate.png)
+
 | Advisor | Job |
 |---|---|
 | **The Analyst** | Facts and evidence. Researches real numbers on the web and cites sources. |
@@ -13,7 +15,32 @@ Boardroom gives anyone a private board of AI advisors. You bring a decision ("Sh
 | **Guest advisor** | Optional fifth seat you choose, e.g. *Your future self*, *A seasoned founder*, *A frugal planner*, or anyone you describe. |
 | **The Chair** | Weighs the debate and rules, with a structured verdict and plan. |
 
-### Features
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/landing.png" alt="Landing page with the animated boardroom scene and sign-up form"><br><sub><b>Landing page.</b> The board around the table, with the advisors taking turns to speak.</sub></td>
+    <td width="50%"><img src="docs/screenshots/composer.png" alt="New meeting form with board focus chips, background chips and the Convene button"><br><sub><b>Bring a decision.</b> Pick a board focus, add background in one tap, seat a guest.</sub></td>
+  </tr>
+  <tr>
+    <td colspan="2"><img src="docs/screenshots/verdict.png" alt="The Chair's verdict: headline, 78% confidence ring, votes, options compared, first move, risks and an action plan"><br><sub><b>The verdict.</b> A clear call, a confidence ring, every advisor's vote, the options scored, your first move, the risks, and a plan you can tick off.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/dark.png" alt="The verdict in dark mode"><br><sub><b>Dark mode.</b> Every screen is designed and contrast-checked in both themes.</sub></td>
+    <td width="50%"><img src="docs/screenshots/theme-reveal.png" alt="Light theme spreading in a circle over the dark theme from the theme button"><br><sub><b>Circular theme switch.</b> The new theme spreads out from the button you pressed (frozen halfway here).</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/palette.png" alt="Command palette open over a meeting, with actions and accent colours"><br><sub><b>Command palette.</b> ⌘K / Ctrl+K to jump anywhere or run any action.</sub></td>
+    <td width="50%"><img src="docs/screenshots/share-card.png" alt="Shareable verdict image with the question, headline, confidence ring and votes"><br><sub><b>Share card.</b> Drawn on the server for every shared verdict; shows as the link preview in iMessage, WhatsApp, Slack and X.</sub></td>
+  </tr>
+  <tr>
+    <td colspan="2"><img src="docs/screenshots/mobile.png" alt="Three phone screens: the landing page, the new meeting form with the bottom tab bar, and the verdict"><br><sub><b>On phones.</b> A bottom tab bar, thumb-sized controls, and the full verdict. Installable to the home screen.</sub></td>
+  </tr>
+</table>
+
+## Features
+
+### The meeting
 
 - **Live, parallel debate.** All four advisors stream at the same time.
 - **Board focus.** Pick a Money, Career, Business, Relationships or Health & life board, and every advisor and the Chair get domain-specific guidance (cash flow and taxes for Money; extra care to involve professionals for Health). Follow-ups keep the focus.
@@ -21,42 +48,63 @@ Boardroom gives anyone a private board of AI advisors. You bring a decision ("Sh
 - **Ask an advisor.** After the verdict, ask any advisor a direct follow-up ("Skeptic, what's the worst case?") and get a streamed answer in their voice. It costs one API call instead of a full meeting. Free: 10 a day; Pro: 200.
 - **Deep debate mode (Pro).** Adds a rebuttal round where advisors challenge each other before the Chair rules. Free users get one deep debate a week as a taste of Pro.
 - **Verdict card.** Headline, confidence ring, each advisor's vote, risks, first move, and an action plan.
-- **Never lose a meeting.** Meetings run on the server independently of the browser. Refresh, lose your connection or open a second tab, and the page catches up live.
-- **Print or save as PDF.** Clean, ink-friendly verdict printouts.
-- **Account control.** Reset a forgotten password by email, change your password (which signs out other devices) download all your data as JSON, or delete your account and all its data.
-- **Review dates and reminders.** The Chair sets a date to revisit each decision. On that date the sidebar flags it, "Hold a review" starts a follow-up meeting, and (with SMTP configured) the user gets an email reminder they can turn off in settings.
-- **One-click unsubscribe.** Reminder and digest emails include a signed unsubscribe link and the standard `List-Unsubscribe` / one-click headers that Gmail and Yahoo expect from bulk senders.
-- **Weekly digest.** With SMTP configured, users get a once-a-week email listing their open plan steps (up to three recent, undecided decisions) with links back. They can turn it off in settings.
-- **Outcomes.** Users mark how each decision turned out (went well, mixed, didn't work out) with a note. The sidebar shows it, and the owner dashboard reports the share of decisions that went well.
-- **Plan tracking.** Check off steps; progress shows in the sidebar for every meeting.
 - **Follow-ups.** Reconvene the board on an earlier decision ("What if I wait six months?") with the earlier verdict as context.
-- **Sample meeting.** Visitors can read a full example meeting from the landing page before signing up.
-- **Referrals.** Every user has an invite link. The friend gets bonus meetings when they sign up, and the referrer gets theirs once the friend finishes a real meeting (3 each by default). Bonus meetings are used after the daily free meetings run out, and a cap per referrer limits farming.
-- **Shareable verdicts.** One click creates a public read-only link (`/s/<token>`). Each shared verdict gets its own preview image, drawn on the server in the app's fonts (question, headline, confidence ring, votes), which shows in iMessage, WhatsApp, Slack and X. Owners can also download the image to post anywhere to the debate and verdict, with a sign-up call to action. Private background notes and progress are never shared.
-- **Accounts and plans.** Email sign-up, a free daily quota, and a Pro plan with unlimited meetings and deep debates.
-- **Demo mode.** Runs with scripted advisors when no API key is set, so anyone can try the full experience.
-- **Voice input.** Tap the mic to speak your question (browsers with built-in speech recognition, such as Chrome, Edge and Safari).
+- **Never lose a meeting.** Meetings run on the server independently of the browser. Refresh, lose your connection or open a second tab, and the page catches up live.
+- **Graceful failures.** If one advisor hits an error, they sit the round out and the meeting continues.
 - **Any language.** Advisors and the Chair reply in the language the question was written in.
-- **Installable.** Add Boardroom to a phone's home screen and it opens like a native app (web app manifest and icons).
-- **Polished UI.** Responsive from phone to desktop, light and dark themes, keyboard shortcuts (⌘/Ctrl+Enter), and no build step.
+- **Voice input.** Tap the mic to speak your question (browsers with built-in speech recognition, such as Chrome, Edge and Safari).
+
+### Design and feel
+
+New in the latest design passes:
+
+- **Circular theme switch.** Switching light/dark spreads the new theme out in a circle from the button you pressed (instant with the keyboard shortcut, or when "reduce motion" is on).
+- **Verdict-ready tab badge.** Start a meeting and switch tabs: the tab's title and icon flip to a green "✓ Verdict ready" the moment the Chair rules, and go back to normal when you return.
+- **Cursor spotlight.** Landing and pricing cards catch a soft light that follows your mouse.
+- **Tactile feedback.** Copy buttons turn into a green check mark, toasts show a thin countdown line, buttons press in slightly, and advisor cards glow in their own colour on hover.
+- **Reading line.** A thin gold line along the top of a meeting fills as you read through the debate.
+- **Typography polish.** Headlines wrap in balanced lines, paragraphs avoid lone last words, and numbers use fixed-width digits so counters don't jiggle.
+- **Feels native on phones.** A bottom tab bar (New, Meetings, Search, You), one-tap background chips (Budget, Timeline, What I've tried…), typing dots while an advisor thinks, a System / Light / Dark appearance picker, and branded, dated printouts.
+- **Keyboard-friendly lists.** Arrow keys (plus Home/End) move through your meetings, straight from the search box. A quiet counter appears only as a question nears its length limit.
+
+The foundations:
+
 - **Designed to feel premium.** Self-hosted Inter and Newsreader fonts (identical on every device), an animated boardroom scene on the landing page, glass headers, depth and soft light, a glow on whichever advisor is speaking, and a verdict that reveals with a filling confidence ring and growing option bars. All motion respects "reduce motion".
 - **A complete landing page.** Animated hero, a visual "How it works", a Free vs Pro pricing table generated from your actual limits and price, an FAQ, a final call to action, and a footer.
 - **Advisor identities.** Each advisor has its own glyph (magnifier, shield, compass, checklist, gavel), and live meetings show a progress stepper (Opening remarks → Rebuttals → Verdict).
-- **Delightful details.** A three-step welcome tour for new accounts, a question box that types out example questions, long remarks folded behind "Read more", confetti when a plan is finished, and a sidebar grouped by Today / Yesterday / Previous 7 days.
-- **Native sharing.** On phones, "Share…" opens the system share sheet with the verdict image attached. If you switch tabs mid-meeting, the tab title tells you when the verdict is ready.
-- **Pinned meetings.** Star the decisions you're actively working on and they stay in a Pinned group at the top of the sidebar.
-- **Make it yours.** Five accent themes (Gold, Sapphire, Emerald, Rose, Violet) in Settings or the ⌘K palette, each contrast-checked in light and dark.
-- **Keyboard first.** `?` shows every shortcut: `N` new meeting, `/` search, `T` theme, plus the ⌘K palette. A slim sticky bar keeps the question in view while you scroll a long meeting.
-- **Feels native on phones.** A bottom tab bar (New, Meetings, Search, You) on small screens, one-tap background chips (Budget, Timeline, What I've tried…), typing dots while an advisor thinks, a System / Light / Dark appearance picker, and branded, dated printouts.
-- **Small, tactile details.** Landing cards catch a soft light that follows your cursor, advisor cards glow in their own colour on hover, copy buttons turn into a green check mark, and a thin gold line tracks how far you've read through a meeting.
-- **Knows when you've looked away.** Start a meeting, switch tabs, and the tab's title and icon flip to a green "✓ Verdict ready" the moment the Chair rules. Headlines wrap in balanced lines, and a quiet counter appears only as a question nears its length limit.
-- **Theme switch with a flourish.** Switching light/dark spreads the new theme out in a circle from the button you pressed. Toasts show a thin countdown line, and arrow keys (plus Home/End) move through your meetings list straight from the search box.
-- **Command palette.** Press ⌘K / Ctrl+K to jump to any meeting or run an action (new meeting, theme, settings, invite, dashboard), all from the keyboard.
 - **Sleek details.** Smooth page transitions (View Transitions API), an icon toolbar with tooltips, a "verdict is in" pill when the verdict lands below the fold, shimmering skeletons, a question box that grows as you type, and an animated sun/moon theme toggle.
+- **Delightful details.** A three-step welcome tour for new accounts, a question box that types out example questions, long remarks folded behind "Read more", confetti when a plan is finished, and a sidebar grouped by Today / Yesterday / Previous 7 days.
+- **Make it yours.** Five accent themes (Gold, Sapphire, Emerald, Rose, Violet) in Settings or the ⌘K palette, each contrast-checked in light and dark.
+- **Command palette.** Press ⌘K / Ctrl+K to jump to any meeting or run an action (new meeting, theme, settings, invite, dashboard), all from the keyboard.
+- **Keyboard first.** `?` shows every shortcut: `N` new meeting, `/` search, `T` theme, plus the ⌘K palette. A slim sticky bar keeps the question in view while you scroll a long meeting.
+- **Polished UI.** Responsive from phone to desktop, light and dark themes, keyboard shortcuts (⌘/Ctrl+Enter), and no build step.
+- **Installable.** Add Boardroom to a phone's home screen and it opens like a native app (web app manifest and icons).
 - **Accessible.** Audited with axe-core (WCAG 2.1 AA plus best practices) on every screen in both themes, with zero violations: compliant text contrast, labelled controls, landmarks, ordered headings, keyboard-trapped dialogs, and reduced-motion support.
-- **Graceful failures.** If one advisor hits an error, they sit the round out and the meeting continues.
-- **Owner dashboard.** Revenue estimate (with 14-day sparklines on the key tiles), users, active users, meetings, failure rate, shared verdicts, and the API cost of every meeting (tokens and web searches turned into dollars), with daily charts. Visible only to admin emails.
+
+### Plans, progress and reviews
+
+- **Plan tracking.** Check off steps; progress shows in the sidebar for every meeting.
+- **Review dates and reminders.** The Chair sets a date to revisit each decision. On that date the sidebar flags it, "Hold a review" starts a follow-up meeting, and (with SMTP configured) the user gets an email reminder they can turn off in settings.
+- **Outcomes.** Users mark how each decision turned out (went well, mixed, didn't work out) with a note. The sidebar shows it, and the owner dashboard reports the share of decisions that went well.
+- **Pinned meetings.** Star the decisions you're actively working on and they stay in a Pinned group at the top of the sidebar.
+- **Weekly digest.** With SMTP configured, users get a once-a-week email listing their open plan steps (up to three recent, undecided decisions) with links back. They can turn it off in settings.
+- **Print or save as PDF.** Clean, ink-friendly verdict printouts.
+
+### Sharing and growth
+
+- **Shareable verdicts.** One click creates a public read-only link (`/s/<token>`). Each shared verdict gets its own preview image, drawn on the server in the app's fonts (question, headline, confidence ring, votes), which shows in iMessage, WhatsApp, Slack and X. Owners can also download the image to post anywhere to the debate and verdict, with a sign-up call to action. Private background notes and progress are never shared.
+- **Native sharing.** On phones, "Share…" opens the system share sheet with the verdict image attached. If you switch tabs mid-meeting, the tab title tells you when the verdict is ready.
+- **Sample meeting.** Visitors can read a full example meeting from the landing page before signing up.
+- **Referrals.** Every user has an invite link. The friend gets bonus meetings when they sign up, and the referrer gets theirs once the friend finishes a real meeting (3 each by default). Bonus meetings are used after the daily free meetings run out, and a cap per referrer limits farming.
+- **Demo mode.** Runs with scripted advisors when no API key is set, so anyone can try the full experience.
+
+### Accounts, trust and the owner
+
+- **Accounts and plans.** Email sign-up, a free daily quota, and a Pro plan with unlimited meetings and deep debates.
+- **Account control.** Reset a forgotten password by email, change your password (which signs out other devices) download all your data as JSON, or delete your account and all its data.
+- **One-click unsubscribe.** Reminder and digest emails include a signed unsubscribe link and the standard `List-Unsubscribe` / one-click headers that Gmail and Yahoo expect from bulk senders.
 - **Duty of care.** Every advisor follows safety rules for crisis situations and high-stakes medical, legal, or financial topics.
+- **Owner dashboard.** Revenue estimate (with 14-day sparklines on the key tiles), users, active users, meetings, failure rate, shared verdicts, and the API cost of every meeting (tokens and web searches turned into dollars), with daily charts. Visible only to admin emails.
 
 ## Run it
 
