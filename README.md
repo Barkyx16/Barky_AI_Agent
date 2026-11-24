@@ -4,7 +4,7 @@
 
 Boardroom gives anyone a private board of AI advisors. You bring a decision ("Should I quit my job to go full-time on my side business?"). Four specialists debate it live on screen, each in their own panel. Then the Chair makes the call: a verdict, a confidence score, the risks to watch, your first move for the next 24 hours, and an action plan you can tick off.
 
-![Four advisors debating a question live, each streaming in their own panel](docs/screenshots/debate.png)
+![Four advisors debating a question live, each streaming in their own panel](docs/screenshots/live-debate.png)
 
 | Advisor | Job |
 |---|---|
@@ -19,22 +19,75 @@ Boardroom gives anyone a private board of AI advisors. You bring a decision ("Sh
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/landing.png" alt="Landing page with the animated boardroom scene and sign-up form"><br><sub><b>Landing page.</b> The board around the table, with the advisors taking turns to speak.</sub></td>
-    <td width="50%"><img src="docs/screenshots/composer.png" alt="New meeting form with board focus chips, background chips and the Convene button"><br><sub><b>Bring a decision.</b> Pick a board focus, add background in one tap, seat a guest.</sub></td>
+    <th width="50%">Landing page</th>
+    <th width="50%">Sign in</th>
   </tr>
   <tr>
-    <td colspan="2"><img src="docs/screenshots/verdict.png" alt="The Chair's verdict: headline, 78% confidence ring, votes, options compared, first move, risks and an action plan"><br><sub><b>The verdict.</b> A clear call, a confidence ring, every advisor's vote, the options scored, your first move, the risks, and a plan you can tick off.</sub></td>
+    <td><img src="docs/screenshots/landing.png" alt="Landing page"></td>
+    <td><img src="docs/screenshots/sign-in.png" alt="Sign in"></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/screenshots/dark.png" alt="The verdict in dark mode"><br><sub><b>Dark mode.</b> Every screen is designed and contrast-checked in both themes.</sub></td>
-    <td width="50%"><img src="docs/screenshots/theme-reveal.png" alt="Light theme spreading in a circle over the dark theme from the theme button"><br><sub><b>Circular theme switch.</b> The new theme spreads out from the button you pressed (frozen halfway here).</sub></td>
+    <th width="50%">New meeting</th>
+    <th width="50%">Live debate</th>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/screenshots/palette.png" alt="Command palette open over a meeting, with actions and accent colours"><br><sub><b>Command palette.</b> ⌘K / Ctrl+K to jump anywhere or run any action.</sub></td>
-    <td width="50%"><img src="docs/screenshots/share-card.png" alt="Shareable verdict image with the question, headline, confidence ring and votes"><br><sub><b>Share card.</b> Drawn on the server for every shared verdict; shows as the link preview in iMessage, WhatsApp, Slack and X.</sub></td>
+    <td><img src="docs/screenshots/new-meeting.png" alt="New meeting"></td>
+    <td><img src="docs/screenshots/live-debate.png" alt="Live debate"></td>
   </tr>
   <tr>
-    <td colspan="2"><img src="docs/screenshots/mobile.png" alt="Three phone screens: the landing page, the new meeting form with the bottom tab bar, and the verdict"><br><sub><b>On phones.</b> A bottom tab bar, thumb-sized controls, and the full verdict. Installable to the home screen.</sub></td>
+    <th width="50%">The verdict</th>
+    <th width="50%">Ask about a passage</th>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/verdict.png" alt="The verdict"></td>
+    <td><img src="docs/screenshots/ask-about-this.png" alt="Ask about a passage"></td>
+  </tr>
+  <tr>
+    <th width="50%">Command palette</th>
+    <th width="50%">Dark mode</th>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/command-palette.png" alt="Command palette"></td>
+    <td><img src="docs/screenshots/dark-mode.png" alt="Dark mode"></td>
+  </tr>
+  <tr>
+    <th width="50%">Settings</th>
+    <th width="50%">Invite friends</th>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/settings.png" alt="Settings"></td>
+    <td><img src="docs/screenshots/invite-friends.png" alt="Invite friends"></td>
+  </tr>
+  <tr>
+    <th width="50%">Shared verdict</th>
+    <th width="50%">Sample meeting</th>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/shared-verdict.png" alt="Shared verdict"></td>
+    <td><img src="docs/screenshots/sample-meeting.png" alt="Sample meeting"></td>
+  </tr>
+  <tr>
+    <th width="50%">Owner dashboard</th>
+    <th width="50%">Reset password</th>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/owner-dashboard.png" alt="Owner dashboard"></td>
+    <td><img src="docs/screenshots/reset-password.png" alt="Reset password"></td>
+  </tr>
+</table>
+
+### On phones
+
+<table>
+  <tr>
+    <th width="33%">New meeting</th>
+    <th width="33%">Meetings</th>
+    <th width="33%">The verdict</th>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/phone-new-meeting.png" alt="New meeting on a phone, with the bottom tab bar"></td>
+    <td><img src="docs/screenshots/phone-meetings.png" alt="Meetings drawer on a phone"></td>
+    <td><img src="docs/screenshots/phone-verdict.png" alt="The verdict on a phone"></td>
   </tr>
 </table>
 
@@ -58,6 +111,8 @@ Boardroom gives anyone a private board of AI advisors. You bring a decision ("Sh
 
 New in the latest design passes:
 
+- **Ask about a passage.** Select any sentence in an advisor's remarks and an "Ask the Skeptic about this" button appears; one click opens a question to that advisor with your selection already quoted.
+- **A verdict that comes into focus.** The Chair's headline sharpens from a soft blur as the verdict lands, and new accounts see the empty boardroom table, seats waiting, with a link to the sample meeting.
 - **Circular theme switch.** Switching light/dark spreads the new theme out in a circle from the button you pressed (instant with the keyboard shortcut, or when "reduce motion" is on).
 - **Verdict-ready tab badge.** Start a meeting and switch tabs: the tab's title and icon flip to a green "✓ Verdict ready" the moment the Chair rules, and go back to normal when you return.
 - **Cursor spotlight.** Landing and pricing cards catch a soft light that follows your mouse.

@@ -1169,3 +1169,37 @@ p, li, .why { text-wrap: pretty; }
 @keyframes toast-timer { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 
 .h-item a:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--accent); border-radius: inherit; }
+
+/* ==========================================================================
+   Pass 13: ask about a selection, verdict headline focus-in, empty sidebar
+   ========================================================================== */
+.sel-ask {
+  --c: var(--accent);
+  position: fixed; z-index: 45; display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 13px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--c) 35%, var(--line));
+  background: var(--bg-elev); color: var(--text); font: 600 13px var(--sans); cursor: pointer;
+  box-shadow: var(--shadow-lift); animation: sel-pop .18s var(--ease) both;
+}
+.sel-ask svg { color: var(--c); }
+.sel-ask:hover { background: color-mix(in srgb, var(--c) 9%, var(--bg-elev)); }
+@keyframes sel-pop { from { opacity: 0; transform: translateY(4px) scale(.96); } to { opacity: 1; transform: none; } }
+
+.verdict.enter h2 { animation: focus-in .9s var(--ease) calc(.12s - var(--since, 0ms)) both; }
+@keyframes focus-in { from { opacity: 0; filter: blur(10px); letter-spacing: .02em; } to { opacity: 1; filter: none; letter-spacing: normal; } }
+
+.empty-side { display: grid; justify-items: center; gap: 8px; padding: 18px 10px 8px; text-align: center; }
+.empty-side svg { width: 132px; height: auto; }
+.empty-side p { margin: 0; color: var(--text-2); font-size: 13.5px; }
+.empty-side .link { font-size: 13.5px; }
+.es-table { fill: none; stroke: color-mix(in srgb, var(--accent) 55%, transparent); stroke-width: 2.5; }
+.es-seat { fill: var(--accent); opacity: .28; }
+@media (prefers-reduced-motion: no-preference) {
+  .es-seat { animation: seat-wait 2.4s ease-in-out infinite; }
+  .es-1 { animation-delay: .3s; } .es-2 { animation-delay: .6s; } .es-3 { animation-delay: .9s; } .es-4 { animation-delay: 1.2s; }
+}
+@keyframes seat-wait { 50% { opacity: .7; } }
+/* Phone drawer: solid, and above the tab bar (whose labels showed through the translucent sidebar). */
+@media (max-width: 860px) {
+  .sidebar { background: var(--bg-sunk); z-index: 31; padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
+  .shell.nav-open .scrim { z-index: 28; }
+}

@@ -250,6 +250,7 @@ const ICON = {
   search: svg('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'),
   arrowDown: svg('<path d="M12 5v14"/><path d="m6 13 6 6 6-6"/>', 15),
   check: svg('<path d="m5 12 5 5 9-10"/>', 15),
+  ask: svg('<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/>', 15),
   info: svg('<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>', 15),
   alert: svg('<path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/>', 15),
   moon: svg('<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>'),
@@ -458,6 +459,56 @@ function marketingSections() {
       <nav><a href="/#/sample">Sample meeting</a><a href="/terms">Terms</a><a href="/privacy">Privacy</a></nav>
       <p>AI-generated perspectives, not professional advice. © ${new Date().getFullYear()} Boardroom</p>
     </footer>`;
+}
+
+/* Select a passage in an advisor's remarks to ask them about it. */
+function installSelectionAsk() {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "sel-ask";
+  btn.hidden = true;
+  document.body.append(btn);
+  let target = null, quote = "";
+  const hide = () => { btn.hidden = true; target = null; };
+  const update = () => {
+    const sel = getSelection();
+    const text = sel && !sel.isCollapsed ? sel.toString().replace(/\s+/g, " ").trim() : "";
+    const el = (n) => (n && n.nodeType === 1 ? n : n?.parentElement);
+    const body = el(sel?.anchorNode)?.closest(".advisor-card .body");
+    if (text.length < 3 || !body || el(sel.focusNode)?.closest(".advisor-card .body") !== body) return hide();
+    const card = body.closest(".advisor-card");
+    if (!card.querySelector("[data-ask-form]")) return hide();  // asking opens once the verdict is in
+    const key = card.querySelector("[data-ask-form]").dataset.askForm;
+    const name = card.querySelector(".advisor-head .name")?.textContent.trim() || "this advisor";
+    target = card; quote = text.length > 180 ? `${text.slice(0, 177).trimEnd()}…` : text;
+    btn.innerHTML = `${ICON.ask}<span>Ask ${esc(name.replace(/^The /, "the "))} about this</span>`;
+    if (card.dataset.c) btn.style.setProperty("--c", card.dataset.c); else btn.style.removeProperty("--c");
+    btn.dataset.key = key;
+    btn.hidden = false;
+    const r = sel.getRangeAt(0).getBoundingClientRect();
+    const w = btn.offsetWidth;
+    btn.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2))}px`;
+    btn.style.top = `${r.top > 56 ? r.top - 46 : r.bottom + 10}px`;
+  };
+  let t;
+  document.addEventListener("selectionchange", () => { clearTimeout(t); t = setTimeout(update, 120); });
+  addEventListener("scroll", hide, { passive: true });
+  addEventListener("hashchange", hide);
+  btn.addEventListener("pointerdown", (e) => e.preventDefault());  // keep the selection while clicking
+  btn.addEventListener("click", () => {
+    if (!target) return;
+    const form = target.querySelector("[data-ask-form]");
+    const open = target.querySelector("[data-ask-open]");
+    form.hidden = false;
+    if (open) open.hidden = true;
+    const input = form.querySelector("input");
+    input.value = `About “${quote}”: `;
+    getSelection().removeAllRanges();
+    hide();
+    input.scrollIntoView({ behavior: reducedMotion() ? "auto" : "smooth", block: "center" });
+    input.focus({ preventScroll: true });
+    input.setSelectionRange(input.value.length, input.value.length);
+  });
 }
 
 /* A soft light that follows the pointer across a card (desktop only). */
@@ -701,7 +752,15 @@ function renderHistory() {
   const el = document.getElementById("history");
   if (!el) return;
   if (!state.meetings.length) {
-    el.innerHTML = `<h2>Your meetings</h2><p class="empty-history">No meetings yet. Your first one is a question away.</p>`;
+    el.innerHTML = `<h2>Your meetings</h2>
+      <div class="empty-side">
+        <svg viewBox="0 0 160 84" aria-hidden="true">
+          <ellipse cx="80" cy="48" rx="46" ry="18" class="es-table"/>
+          ${[[80, 14], [24, 46], [136, 46], [46, 76], [114, 76]].map(([x, y], i) => `<circle cx="${x}" cy="${y}" r="8" class="es-seat es-${i}"/>`).join("")}
+        </svg>
+        <p>No meetings yet. Your first one is a question away.</p>
+        <a class="link" href="#/sample">See a sample meeting →</a>
+      </div>`;
     return;
   }
   const q = (state.filter || "").trim().toLowerCase();
@@ -2406,4 +2465,5 @@ async function boot() {
   else renderLanding(location.hash === "#/login" ? "login" : "signup");
 }
 
+installSelectionAsk();
 boot();
