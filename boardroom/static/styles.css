@@ -1103,3 +1103,36 @@ a:hover > .arr, button:hover > .arr { transform: translateX(3px); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ==========================================================================
+   Pass 10: spotlight cards, copy confirmation, reading progress, card hover
+   ========================================================================== */
+.lp-card { position: relative; }
+.spot { isolation: isolate; }
+.spot::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: -1;
+  background: radial-gradient(420px circle at var(--mx, 50%) var(--my, 0%), color-mix(in srgb, var(--accent) 11%, transparent), transparent 60%);
+  opacity: 0; transition: opacity .35s var(--ease);
+}
+.spot:hover::after { opacity: 1; }
+
+.btn.is-copied, .tool.is-copied, .tool.is-copied:hover:not(:disabled) { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); }
+.btn.is-copied { gap: 6px; }
+.is-copied svg { animation: copied-pop .35s var(--ease) both; }
+@keyframes copied-pop { from { transform: scale(.4) rotate(-12deg); opacity: 0; } to { transform: none; opacity: 1; } }
+
+.read-progress { display: none; }
+@supports (animation-timeline: scroll()) {
+  .read-progress {
+    display: block; position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 40; pointer-events: none;
+    background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #c9a96e));
+    transform-origin: 0 50%; transform: scaleX(0);
+    animation: read-grow linear both; animation-timeline: scroll(root);
+  }
+  @keyframes read-grow { to { transform: scaleX(1); } }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .advisor-card:hover { border-color: color-mix(in srgb, var(--c) 40%, var(--line)); box-shadow: var(--shadow-lift), 0 0 0 1px color-mix(in srgb, var(--c) 14%, transparent); }
+}
+@media print { .read-progress { display: none !important; } }

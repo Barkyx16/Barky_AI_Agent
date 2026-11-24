@@ -93,6 +93,15 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def _alter(c: sqlite3.Connection, sql: str) -> None:
+    """Run one ALTER TABLE migration, tolerating a second process that just ran it too."""
+    try:
+        c.execute(sql)
+    except sqlite3.OperationalError as e:
+        if "duplicate column name" not in str(e):
+            raise
+
+
 class Database:
     # The most bonus meetings one referrer can earn; the app sets this from its settings.
     referral_cap = 30
@@ -105,45 +114,45 @@ class Database:
             c.executescript(SCHEMA)
             user_cols = {r["name"] for r in c.execute("PRAGMA table_info(users)")}
             if "stripe_customer_id" not in user_cols:
-                c.execute("ALTER TABLE users ADD COLUMN stripe_customer_id TEXT")
+                _alter(c, "ALTER TABLE users ADD COLUMN stripe_customer_id TEXT")
             for col, kind in (
                 ("referral_code", "TEXT"), ("referred_by", "INTEGER"),
                 ("bonus_meetings", "INTEGER NOT NULL DEFAULT 0"), ("referral_bonus_earned", "INTEGER NOT NULL DEFAULT 0"),
                 ("referral_reward_pending", "INTEGER NOT NULL DEFAULT 0"),
             ):
                 if col not in user_cols:
-                    c.execute(f"ALTER TABLE users ADD COLUMN {col} {kind}")
+                    _alter(c, f"ALTER TABLE users ADD COLUMN {col} {kind}")
             c.execute(
                 "CREATE UNIQUE INDEX IF NOT EXISTS users_referral ON users(referral_code) WHERE referral_code IS NOT NULL"
             )
             if "digest_emails" not in user_cols:
-                c.execute("ALTER TABLE users ADD COLUMN digest_emails INTEGER NOT NULL DEFAULT 1")
+                _alter(c, "ALTER TABLE users ADD COLUMN digest_emails INTEGER NOT NULL DEFAULT 1")
             if "last_digest_at" not in user_cols:
-                c.execute("ALTER TABLE users ADD COLUMN last_digest_at TEXT")
+                _alter(c, "ALTER TABLE users ADD COLUMN last_digest_at TEXT")
             if "remind_emails" not in user_cols:
-                c.execute("ALTER TABLE users ADD COLUMN remind_emails INTEGER NOT NULL DEFAULT 1")
+                _alter(c, "ALTER TABLE users ADD COLUMN remind_emails INTEGER NOT NULL DEFAULT 1")
             cols = {r["name"] for r in c.execute("PRAGMA table_info(meetings)")}
             if "share_token" not in cols:
-                c.execute("ALTER TABLE meetings ADD COLUMN share_token TEXT")
+                _alter(c, "ALTER TABLE meetings ADD COLUMN share_token TEXT")
             if "guest" not in cols:
-                c.execute("ALTER TABLE meetings ADD COLUMN guest TEXT")
+                _alter(c, "ALTER TABLE meetings ADD COLUMN guest TEXT")
             if "pinned" not in cols:
-                c.execute("ALTER TABLE meetings ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0")
+                _alter(c, "ALTER TABLE meetings ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0")
             if "focus" not in cols:
-                c.execute("ALTER TABLE meetings ADD COLUMN focus TEXT NOT NULL DEFAULT ''")
+                _alter(c, "ALTER TABLE meetings ADD COLUMN focus TEXT NOT NULL DEFAULT ''")
             if "review_at" not in cols:
-                c.execute("ALTER TABLE meetings ADD COLUMN review_at TEXT")
+                _alter(c, "ALTER TABLE meetings ADD COLUMN review_at TEXT")
             for col in ("outcome", "outcome_note", "outcome_at"):
                 if col not in cols:
-                    c.execute(f"ALTER TABLE meetings ADD COLUMN {col} TEXT")
+                    _alter(c, f"ALTER TABLE meetings ADD COLUMN {col} TEXT")
             if "reminded" not in cols:
-                c.execute("ALTER TABLE meetings ADD COLUMN reminded INTEGER NOT NULL DEFAULT 0")
+                _alter(c, "ALTER TABLE meetings ADD COLUMN reminded INTEGER NOT NULL DEFAULT 0")
             for col, kind in (
                 ("input_tokens", "INTEGER"), ("output_tokens", "INTEGER"), ("cache_write_tokens", "INTEGER"),
                 ("cache_read_tokens", "INTEGER"), ("web_searches", "INTEGER"), ("cost_usd", "REAL"),
             ):
                 if col not in cols:
-                    c.execute(f"ALTER TABLE meetings ADD COLUMN {col} {kind} NOT NULL DEFAULT 0")
+                    _alter(c, f"ALTER TABLE meetings ADD COLUMN {col} {kind} NOT NULL DEFAULT 0")
             c.execute(
                 "CREATE UNIQUE INDEX IF NOT EXISTS meetings_share ON meetings(share_token) "
                 "WHERE share_token IS NOT NULL"

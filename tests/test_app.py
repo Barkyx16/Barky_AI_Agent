@@ -1424,3 +1424,20 @@ def test_pin_meetings(tmp_path):
     client.post("/api/logout")
     signup(client, email="eve@example.com")
     assert client.patch(f"/api/meetings/{meeting_id}/pin", json={"pinned": False}).status_code == 404
+
+
+
+def test_migrations_tolerate_a_concurrent_start(tmp_path):
+    """Two workers starting on the same fresh database must not crash on ALTER TABLE."""
+    import sqlite3
+    import pytest
+    from boardroom.db import Database, _alter
+    c = sqlite3.connect(":memory:")
+    c.execute("CREATE TABLE t (id INTEGER)")
+    _alter(c, "ALTER TABLE t ADD COLUMN extra TEXT")
+    _alter(c, "ALTER TABLE t ADD COLUMN extra TEXT")  # the other worker got there first: fine
+    with pytest.raises(sqlite3.OperationalError):
+        _alter(c, "ALTER TABLE missing ADD COLUMN extra TEXT")  # real errors still surface
+    path = str(tmp_path / "race.db")
+    Database(path)
+    Database(path)

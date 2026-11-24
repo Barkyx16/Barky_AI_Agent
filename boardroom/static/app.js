@@ -440,6 +440,35 @@ function marketingSections() {
     </footer>`;
 }
 
+/* A soft light that follows the pointer across a card (desktop only). */
+function bindSpotlight(cards) {
+  if (!matchMedia("(hover: hover) and (pointer: fine)").matches) return;
+  cards.forEach((card) => {
+    card.classList.add("spot");
+    card.addEventListener("pointermove", (e) => {
+      const r = card.getBoundingClientRect();
+      card.style.setProperty("--mx", `${e.clientX - r.left}px`);
+      card.style.setProperty("--my", `${e.clientY - r.top}px`);
+    });
+  });
+}
+
+/* A copy button briefly turns into a check mark, so success is visible right where you clicked. */
+function copiedFeedback(btn, label = "Copied") {
+  if (!btn || btn.classList.contains("is-copied")) return;
+  const html = btn.innerHTML, tip = btn.dataset.tip, aria = btn.getAttribute("aria-label");
+  btn.classList.add("is-copied");
+  btn.innerHTML = btn.classList.contains("tool") ? ICON.check : `${ICON.check}<span>${label}</span>`;
+  if (tip) btn.dataset.tip = label;
+  if (aria) btn.setAttribute("aria-label", label);
+  setTimeout(() => {
+    btn.classList.remove("is-copied");
+    btn.innerHTML = html;
+    if (tip) btn.dataset.tip = tip;
+    if (aria) btn.setAttribute("aria-label", aria);
+  }, 1600);
+}
+
 function renderLanding(tab = "signup") {
   const ref = pendingRef();
   const seat = (a) => `<div class="seat-pos pos-${a.key}" data-seat="${a.key}">
@@ -495,6 +524,7 @@ function renderLanding(tab = "signup") {
   };
   document.getElementById("jump-signup")?.addEventListener("click", toSignup);
   $app.querySelectorAll(".lp-start").forEach((b) => b.addEventListener("click", toSignup));
+  bindSpotlight($app.querySelectorAll(".lp-card, .price-plan"));
   const form = document.getElementById("auth-form");
   // On phones, focusing would jump past the hero and open the keyboard straight away.
   if (matchMedia("(min-width: 981px)").matches) form.querySelector("input").focus();
@@ -774,7 +804,7 @@ async function showInvite() {
   back.querySelector("#invite-done").addEventListener("click", close);
   back.querySelector("#invite-copy").addEventListener("click", async () => {
     const input = back.querySelector("#invite-link");
-    try { await navigator.clipboard.writeText(input.value); toast("Invite link copied"); } catch (_) { input.select(); }
+    try { await navigator.clipboard.writeText(input.value); copiedFeedback(back.querySelector("#invite-copy")); toast("Invite link copied"); } catch (_) { input.select(); }
   });
   back.querySelector("#invite-copy").focus();
 }
@@ -1315,6 +1345,7 @@ function meetingLayout(m, rounds, cardsFor) {
   const focusLabel = (state.config.focus_areas || []).find((f) => f.key === m.focus)?.label;
   const mode = `${m.mode === "deep" ? "Deep debate" : "Quick session"}${focusLabel ? ` · ${focusLabel} board` : ""}`;
   return `
+    <div class="read-progress" aria-hidden="true"></div>
     <div class="mini-head" aria-hidden="true">
       <span class="mini-q">${esc(m.question)}</span>
       <button class="mini-btn" type="button" tabindex="-1" data-mini="verdict">The verdict ${ICON.arrowDown}</button>
@@ -1673,7 +1704,8 @@ function bindMeetingActions(view, m) {
     input.focus();
   });
   view.querySelector('[data-act="print"]')?.addEventListener("click", () => window.print());
-  view.querySelector('[data-act="copy"]')?.addEventListener("click", async () => {
+  view.querySelector('[data-act="copy"]')?.addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
     if (!m.verdict) { toast("The verdict isn't in yet."); return; }
     const v = m.verdict;
     const lines = [
@@ -1682,7 +1714,7 @@ function bindMeetingActions(view, m) {
       "", "Action plan:", ...m.steps.map((s, i) => `${i + 1}. ${s.title} (${s.when}) — ${s.detail}`),
       "", `Review: ${v.review}`,
     ];
-    try { await navigator.clipboard.writeText(lines.join("\n")); toast("Summary copied"); } catch (_) { toast("Couldn't access the clipboard"); }
+    try { await navigator.clipboard.writeText(lines.join("\n")); copiedFeedback(btn); toast("Summary copied"); } catch (_) { toast("Couldn't access the clipboard"); }
   });
   view.querySelector('[data-act="retry"]')?.addEventListener("click", () => {
     state.live = null;
@@ -1811,7 +1843,7 @@ function showShare(m, button) {
     });
     back.querySelector("#share-copy")?.addEventListener("click", async () => {
       const input = back.querySelector("#share-link");
-      try { await navigator.clipboard.writeText(input.value); toast("Link copied"); } catch (_) { input.select(); }
+      try { await navigator.clipboard.writeText(input.value); copiedFeedback(back.querySelector("#share-copy")); toast("Link copied"); } catch (_) { input.select(); }
     });
     back.querySelector("#share-stop")?.addEventListener("click", async () => {
       try {
