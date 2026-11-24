@@ -223,7 +223,7 @@ function renderLanding(tab = "signup") {
     <div class="seat"><div class="avatar" data-c="${a.color}">${esc(a.initials)}</div>
       <div><strong>${esc(a.name)}</strong><span>${esc(a.role)}</span></div></div>`).join("");
   $app.innerHTML = `
-    <div class="landing">
+    <main class="landing">
       <section class="landing-hero">
         <div class="brand"><img src="/static/favicon.svg" alt=""> Boardroom</div>
         <h1>Every hard decision deserves a board meeting.</h1>
@@ -254,7 +254,7 @@ function renderLanding(tab = "signup") {
           ${tab === "signup" ? `<p class="fine">By creating an account you agree to the <a href="/terms" target="_blank">Terms</a> and <a href="/privacy" target="_blank">Privacy Policy</a>. Boardroom gives AI-generated perspectives, not professional advice.</p>` : ""}
         </div>
       </section>
-    </div>`;
+    </main>`;
   applyStyles($app);
   $app.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => renderLanding(b.dataset.tab)));
   document.getElementById("forgot")?.addEventListener("click", renderForgot);
@@ -384,16 +384,16 @@ function renderHistory() {
   const el = document.getElementById("history");
   if (!el) return;
   if (!state.meetings.length) {
-    el.innerHTML = `<h4>Your meetings</h4><p class="empty-history">No meetings yet. Your first one is a question away.</p>`;
+    el.innerHTML = `<h2>Your meetings</h2><p class="empty-history">No meetings yet. Your first one is a question away.</p>`;
     return;
   }
   const q = (state.filter || "").trim().toLowerCase();
   const shown = q ? state.meetings.filter((m) => `${m.question} ${m.headline || ""}`.toLowerCase().includes(q)) : state.meetings;
   if (!shown.length) {
-    el.innerHTML = `<h4>Your meetings</h4><p class="empty-history">No meetings match “${esc(state.filter.trim())}”.</p>`;
+    el.innerHTML = `<h2>Your meetings</h2><p class="empty-history">No meetings match “${esc(state.filter.trim())}”.</p>`;
     return;
   }
-  el.innerHTML = `<h4>${q ? `${shown.length} found` : "Your meetings"}</h4>` + shown.map((m) => {
+  el.innerHTML = `<h2>${q ? `${shown.length} found` : "Your meetings"}</h2>` + shown.map((m) => {
     const pct = m.total_steps ? Math.round((100 * m.done_steps) / m.total_steps) : 0;
     const meta = m.status === "done"
       ? `<span class="mini-bar"><i data-w="${pct}"></i></span><span>${m.done_steps}/${m.total_steps}</span>${m.outcome ? `<span class="out out-${esc(m.outcome)}">${esc((OUTCOMES.find(([k]) => k === m.outcome) || ["", ""])[1])}</span>` : isDue(m.review_at) ? '<span class="due">Review due</span>' : ""}`
@@ -483,7 +483,7 @@ async function showInvite() {
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="inv-title">
       <h2 id="inv-title">Invite friends</h2>
       <p class="fine left">Know someone facing a big decision? When they sign up with your link, you both get <b>${Number(info.bonus)} bonus meetings</b>${info.earned >= info.cap ? "" : ` (up to ${Number(info.cap)} for you in total)`}.</p>
-      <div class="row-gap"><input class="input" id="invite-link" readonly value="${esc(link)}"><button class="btn btn-primary" id="invite-copy">Copy</button></div>
+      <div class="row-gap"><label class="sr-only" for="invite-link">Your invite link</label><input class="input" id="invite-link" readonly value="${esc(link)}"><button class="btn btn-primary" id="invite-copy">Copy</button></div>
       <p class="fine left">${Number(info.invited)} ${info.invited === 1 ? "friend has" : "friends have"} joined · ${Number(info.earned)} bonus meetings earned</p>
       <div class="actions"><button class="btn" id="invite-done">Done</button></div>
     </div>`;
@@ -688,7 +688,7 @@ function renderComposer(prefill) {
       </div>
       <p class="error-text" id="composer-error"></p>
     </form>
-    <div class="examples"><h4>Or try one of these</h4><div class="chips">
+    <div class="examples"><h2>Or try one of these</h2><div class="chips">
       ${EXAMPLES.map((q) => `<button class="chip" type="button">${esc(q)}</button>`).join("")}
     </div></div>`;
 
@@ -1344,7 +1344,7 @@ function showShare(m, button) {
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="sh-title">
         <h2 id="sh-title">Share this verdict</h2>
         <p class="fine left">Anyone with the link can read the debate and verdict. Your background notes and progress stay private.</p>
-        <div class="row-gap"><input class="input" id="share-link" readonly value="${esc(linkFor(m.share_token))}"><button class="btn btn-primary" id="share-copy">Copy</button></div>
+        <div class="row-gap"><label class="sr-only" for="share-link">Share link</label><input class="input" id="share-link" readonly value="${esc(linkFor(m.share_token))}"><button class="btn btn-primary" id="share-copy">Copy</button></div>
         <div class="actions"><button class="btn btn-ghost" id="share-stop">Stop sharing</button><button class="btn" id="share-done">Done</button></div>
       </div>` : `
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="sh-title">
@@ -1486,8 +1486,8 @@ async function renderAdmin() {
       })()}
     </div>
     <div class="charts">
-      <section class="card chart-card"><h3>Meetings per day</h3><p class="chart-sub">Last 14 days</p>${columnChart("ch-meetings", st.daily, "meetings", fmtInt)}</section>
-      <section class="card chart-card"><h3>API cost per day</h3><p class="chart-sub">Last 14 days, estimated</p>${columnChart("ch-cost", st.daily, "cost_usd", (v) => fmtUsd(v, v > 0 && v < 10 ? 2 : 0))}</section>
+      <section class="card chart-card"><h2>Meetings per day</h2><p class="chart-sub">Last 14 days</p>${columnChart("ch-meetings", st.daily, "meetings", fmtInt)}</section>
+      <section class="card chart-card"><h2>API cost per day</h2><p class="chart-sub">Last 14 days, estimated</p>${columnChart("ch-cost", st.daily, "cost_usd", (v) => fmtUsd(v, v > 0 && v < 10 ? 2 : 0))}</section>
     </div>
     <details class="table-view"><summary>Show as table</summary>
       <table><thead><tr><th>Day</th><th>Sign-ups</th><th>Meetings</th><th>API cost</th></tr></thead>

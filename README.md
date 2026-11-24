@@ -36,7 +36,8 @@ Boardroom gives anyone a private board of AI advisors. You bring a decision ("Sh
 - **Voice input.** Tap the mic to speak your question (browsers with built-in speech recognition, such as Chrome, Edge and Safari).
 - **Any language.** Advisors and the Chair reply in the language the question was written in.
 - **Installable.** Add Boardroom to a phone's home screen and it opens like a native app (web app manifest and icons).
-- **Polished UI.** Responsive from phone to desktop, light and dark themes, keyboard shortcuts (⌘/Ctrl+Enter), accessible markup, and no build step.
+- **Polished UI.** Responsive from phone to desktop, light and dark themes, keyboard shortcuts (⌘/Ctrl+Enter), and no build step.
+- **Accessible.** Audited with axe-core (WCAG 2.1 AA plus best practices) on every screen in both themes, with zero violations: compliant text contrast, labelled controls, landmarks, ordered headings, keyboard-trapped dialogs, and reduced-motion support.
 - **Graceful failures.** If one advisor hits an error, they sit the round out and the meeting continues.
 - **Owner dashboard.** Revenue estimate, users, active users, meetings, failure rate, shared verdicts, and the API cost of every meeting (tokens and web searches turned into dollars), with daily charts. Visible only to admin emails.
 - **Duty of care.** Every advisor follows safety rules for crisis situations and high-stakes medical, legal, or financial topics.
