@@ -1136,3 +1136,18 @@ a:hover > .arr, button:hover > .arr { transform: translateX(3px); }
   .advisor-card:hover { border-color: color-mix(in srgb, var(--c) 40%, var(--line)); box-shadow: var(--shadow-lift), 0 0 0 1px color-mix(in srgb, var(--c) 14%, transparent); }
 }
 @media print { .read-progress { display: none !important; } }
+
+/* ==========================================================================
+   Pass 11: typography polish, question counter, press feel, anchor offsets
+   ========================================================================== */
+h1, h2, h3, .verdict h2, .lp-card h3, .mini-q { text-wrap: balance; }
+p, li, .why { text-wrap: pretty; }
+.kpis, .ring, .vis-ring b, [data-count] { font-variant-numeric: tabular-nums; }
+
+.q-count { margin: 6px 4px 0; text-align: right; font-size: 12.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.q-count.low { color: var(--bad); font-weight: 600; }
+
+.btn { transition: transform .12s var(--ease), background .15s, box-shadow .2s var(--ease), border-color .15s, color .15s, filter .15s; }
+.btn:active:not(:disabled) { transform: scale(.975); }
+
+.verdict, .section-title, .followup { scroll-margin-top: 84px; }

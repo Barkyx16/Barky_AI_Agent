@@ -1002,6 +1002,7 @@ function renderComposer(prefill) {
       </div>
       <label class="sr-only" for="question">Your question</label>
       <textarea class="textarea" id="question" maxlength="2000" placeholder="e.g. Should I take the job offer in Denver or stay where I am?">${esc(state.draft.question)}</textarea>
+      <p class="q-count" id="q-count" aria-live="polite" hidden></p>
       <details ${state.draft.context ? "open" : ""}>
         <summary>Add background (optional)</summary>
         <label class="sr-only" for="context">Background</label>
@@ -1053,7 +1054,16 @@ function renderComposer(prefill) {
   q.focus();
   q.setSelectionRange(q.value.length, q.value.length);
   const grow = () => { q.style.height = "auto"; q.style.height = `${Math.min(q.scrollHeight + 2, 420)}px`; };
-  q.addEventListener("input", () => { state.draft.question = q.value; grow(); });
+  // A quiet counter appears only as the question nears its limit.
+  const count = view.querySelector("#q-count");
+  const recount = () => {
+    const left = 2000 - q.value.length;
+    count.hidden = left > 300;
+    count.textContent = `${left} characters left`;
+    count.classList.toggle("low", left <= 60);
+  };
+  q.addEventListener("input", () => { state.draft.question = q.value; grow(); recount(); });
+  recount();
   if (q.value) grow();
   typePlaceholder(q);
   view.querySelectorAll("[data-focus]").forEach((b) => b.addEventListener("click", () => {
@@ -2044,7 +2054,15 @@ function tabAlert(text) {
   if (!document.hidden) return;
   const original = document.title;
   document.title = `${text} · Boardroom`;
-  const restore = () => { if (!document.hidden) { document.title = original; document.removeEventListener("visibilitychange", restore); } };
+  // The tab's icon gets a green check too, so it's visible even when titles are truncated.
+  const icon = document.querySelector('link[rel="icon"]');
+  if (icon) icon.href = "/static/favicon-ready.svg";
+  const restore = () => {
+    if (document.hidden) return;
+    document.title = original;
+    if (icon) icon.href = "/static/favicon.svg";
+    document.removeEventListener("visibilitychange", restore);
+  };
   document.addEventListener("visibilitychange", restore);
 }
 
