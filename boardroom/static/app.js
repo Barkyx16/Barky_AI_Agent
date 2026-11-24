@@ -204,10 +204,18 @@ function toggleTheme() {
   const isDark = document.documentElement.dataset.theme
     ? document.documentElement.dataset.theme === "dark"
     : matchMedia("(prefers-color-scheme: dark)").matches;
-  const next = isDark ? "light" : "dark";
-  document.documentElement.dataset.theme = next;
-  try { localStorage.setItem("theme", next); } catch (_) { /* ignore */ }
+  setTheme(isDark ? "light" : "dark");
 }
+
+/* "system" follows the device; "light"/"dark" pin it. */
+function setTheme(mode) {
+  if (mode === "system") delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = mode;
+  try { if (mode === "system") localStorage.removeItem("theme"); else localStorage.setItem("theme", mode); } catch (_) { /* ignore */ }
+  document.querySelectorAll("[data-theme-opt]").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.themeOpt === mode)));
+}
+
+const currentTheme = () => document.documentElement.dataset.theme || "system";
 
 const ICON_THEME = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>`;
 const ICON_GEAR = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>`;
@@ -601,10 +609,19 @@ function renderShell() {
         </header>
         <main class="main"><div class="container" id="view"></div></main>
       </div>
+      <nav class="tabbar" aria-label="Quick navigation">
+        <a href="#/new" data-tab-nav="new">${ICON_PLUS}<span>New</span></a>
+        <button type="button" data-tab-nav="meetings">${ICON.doc}<span>Meetings</span></button>
+        <button type="button" data-tab-nav="search">${ICON.search}<span>Search</span></button>
+        <button type="button" data-tab-nav="you">${ICON.gear}<span>You</span></button>
+      </nav>
     </div>`;
   document.getElementById("menu").addEventListener("click", () => document.getElementById("shell").classList.add("nav-open"));
   document.getElementById("scrim").addEventListener("click", closeNav);
   document.getElementById("open-palette").addEventListener("click", openPalette);
+  document.querySelector('[data-tab-nav="meetings"]').addEventListener("click", () => document.getElementById("shell").classList.add("nav-open"));
+  document.querySelector('[data-tab-nav="search"]').addEventListener("click", openPalette);
+  document.querySelector('[data-tab-nav="you"]').addEventListener("click", showSettings);
   document.getElementById("search").addEventListener("input", (e) => { state.filter = e.target.value; renderHistory(); });
   renderHistory();
   renderAccount();
@@ -782,7 +799,11 @@ function showSettings() {
         <label class="toggle"><input type="checkbox" id="digest" ${state.user.digest_emails ? "checked" : ""}> Weekly digest of my open plan steps</label>
       </div>` : ""}
       <div class="settings-block">
-        <h3 id="accent-label">Accent color</h3>
+        <h3 id="theme-label">Appearance</h3>
+        <div class="segmented theme-seg" role="radiogroup" aria-labelledby="theme-label">
+          ${[["system", "System"], ["light", "Light"], ["dark", "Dark"]].map(([k, l]) => `<button type="button" role="radio" data-theme-opt="${k}" aria-checked="${currentTheme() === k}">${l}</button>`).join("")}
+        </div>
+        <h3 id="accent-label" class="sub-h">Accent color</h3>
         <div class="swatches" role="radiogroup" aria-labelledby="accent-label">
           ${ACCENTS.map(([k, label, c]) => `<button type="button" class="swatch" role="radio" data-swatch="${k}" data-c="${c}" aria-checked="${currentAccent() === k}" aria-label="${label}" title="${label}"></button>`).join("")}
         </div>
@@ -815,6 +836,7 @@ function showSettings() {
       } catch (err) { e.target.checked = !on; toast(err.message); }
     });
   }
+  back.querySelectorAll("[data-theme-opt]").forEach((b) => b.addEventListener("click", () => setTheme(b.dataset.themeOpt)));
   back.querySelectorAll("[data-swatch]").forEach((b) => {
     b.style.setProperty("--sw", b.dataset.c);
     b.addEventListener("click", () => setAccent(b.dataset.swatch));
@@ -870,6 +892,7 @@ function route() {
 
 function routeNow() {
   closeNav();
+  document.querySelector('[data-tab-nav="new"]')?.setAttribute("aria-current", location.hash === "#/new" || !location.hash ? "page" : "false");
   if (location.hash === "#/billing/success") {
     history.replaceState(null, "", "#/new");
     welcomePro();
@@ -952,6 +975,9 @@ function renderComposer(prefill) {
       <details ${state.draft.context ? "open" : ""}>
         <summary>Add background (optional)</summary>
         <label class="sr-only" for="context">Background</label>
+        <div class="ctx-chips" role="group" aria-label="Add a detail">
+          ${["Budget", "Timeline", "What I've tried", "What matters most", "Who else is affected"].map((l) => `<button type="button" class="ctx-chip" data-ctx="${esc(l)}">+ ${esc(l)}</button>`).join("")}
+        </div>
         <textarea class="textarea" id="context" maxlength="6000" placeholder="Anything the board should know: numbers, constraints, what you've tried, what matters most to you.">${esc(state.draft.context)}</textarea>
       </details>
       <details class="guest-seat" ${state.guest.name ? "open" : ""}>
@@ -1037,6 +1063,16 @@ function renderComposer(prefill) {
     window.addEventListener("hashchange", stop, { once: true });
   }
   ctx.addEventListener("input", () => { state.draft.context = ctx.value; });
+  view.querySelectorAll("[data-ctx]").forEach((b) => b.addEventListener("click", () => {
+    // Add a labelled line and put the cursor right after the label.
+    const label = `${b.dataset.ctx}: `;
+    const prefix = ctx.value && !ctx.value.endsWith("\n") ? "\n" : "";
+    ctx.value += prefix + label;
+    state.draft.context = ctx.value;
+    ctx.focus();
+    ctx.setSelectionRange(ctx.value.length, ctx.value.length);
+    b.classList.add("used");
+  }));
   view.querySelectorAll("[data-mode]").forEach((b) => b.addEventListener("click", () => {
     if (b.dataset.mode === "deep" && !deepOk) { showUpgrade(); return; }
     state.mode = b.dataset.mode;
@@ -1284,6 +1320,7 @@ function meetingLayout(m, rounds, cardsFor) {
       <button class="mini-btn" type="button" tabindex="-1" data-mini="verdict">The verdict ${ICON.arrowDown}</button>
       <button class="mini-btn" type="button" tabindex="-1" data-mini="top">Top ${ICON.up}</button>
     </div>
+    <div class="print-head" aria-hidden="true"><img src="/static/favicon.svg" alt=""> <b>Boardroom</b><span>${esc(new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }))}</span></div>
     ${m.readonly ? "" : demoBanner()}
     <div class="meeting-head">
       <div>
@@ -1325,7 +1362,7 @@ function tidyPartial(text) {
 
 function remarkBody(r) {
   if (!r.text && r.done) return `<div class="body muted">Didn't speak this round.</div>`;
-  if (!r.text) return `<div class="body skeleton" aria-hidden="true"><i></i><i></i><i></i></div>`;
+  if (!r.text) return `<div class="body typing" aria-label="Thinking"><span></span><span></span><span></span></div>`;
   return `<div class="body prose ${r.done ? "" : "caret"}">${md(r.done ? r.text : tidyPartial(r.text))}</div>`;
 }
 

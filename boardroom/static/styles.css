@@ -1028,6 +1028,54 @@ a:hover > .arr, button:hover > .arr { transform: translateX(3px); }
 .h-pin.is-on svg { fill: currentColor; }
 @media (hover: none) { .h-pin { display: none; } }
 
+/* ========================================================================
+   Pass 9: tab bar, context chips, typing dots, appearance, print header
+   ======================================================================== */
+.tabbar { display: none; }
+@media (max-width: 860px) {
+  .tabbar {
+    display: grid; grid-template-columns: repeat(4, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 25;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line);
+    background: color-mix(in srgb, var(--bg) 80%, transparent); -webkit-backdrop-filter: saturate(1.4) blur(16px); backdrop-filter: saturate(1.4) blur(16px);
+  }
+  .tabbar > a, .tabbar > button { display: grid; justify-items: center; gap: 3px; padding: 6px 0; border: 0; background: none; color: var(--text-3); font: 600 11px var(--sans); text-decoration: none; border-radius: 10px; cursor: pointer; }
+  .tabbar svg { width: 21px; height: 21px; }
+  .tabbar > [aria-current="page"] { color: var(--accent); }
+  .tabbar > a:active, .tabbar > button:active { background: var(--bg-sunk); }
+  .main { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+  #toast { bottom: calc(84px + env(safe-area-inset-bottom)); }
+  #verdict-pill { bottom: calc(86px + env(safe-area-inset-bottom)); }
+  .topbar a[aria-label="New meeting"] { visibility: hidden; }
+}
+
+/* Context helper chips */
+.ctx-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.ctx-chip { border: 1px dashed var(--line-strong); background: transparent; color: var(--text-2); border-radius: 99px; padding: 4px 11px; font: 550 12.5px var(--sans); cursor: pointer; transition: border-color .15s, color .15s, background .15s; }
+.ctx-chip:hover { border-style: solid; border-color: var(--accent); color: var(--text); }
+.ctx-chip.used { border-style: solid; background: var(--accent-soft); color: var(--text); }
+.composer details .ctx-chips + .textarea { margin-top: 8px; }
+
+/* Typing indicator */
+.body.typing { display: flex; gap: 5px; align-items: center; height: 22px; padding-left: 2px; }
+.body.typing span { width: 7px; height: 7px; border-radius: 50%; background: color-mix(in srgb, var(--c, var(--accent)) 70%, var(--text-3)); animation: typing 1.2s ease-in-out infinite; }
+.body.typing span:nth-child(2) { animation-delay: .15s; } .body.typing span:nth-child(3) { animation-delay: .3s; }
+@keyframes typing { 0%, 60%, 100% { transform: translateY(0); opacity: .45; } 30% { transform: translateY(-5px); opacity: 1; } }
+
+/* Appearance picker */
+.theme-seg { margin-bottom: 4px; }
+.theme-seg button[aria-checked="true"] { background: var(--bg-elev); color: var(--text); box-shadow: var(--shadow); }
+.settings-block .sub-h { margin-top: 16px; }
+
+/* Print header */
+.print-head { display: none; }
+@media print {
+  .print-head { display: flex !important; align-items: center; gap: 8px; padding-bottom: 10px; margin-bottom: 18px; border-bottom: 1px solid #ccc; font-size: 12px; color: #555; }
+  .print-head img { width: 20px; height: 20px; }
+  .print-head b { font: 600 15px var(--serif); color: #000; }
+  .print-head span { margin-left: auto; }
+  .tabbar { display: none !important; }
+}
+
 /* Responsive ------------------------------------------------------------- */
 @media (max-width: 980px) {
   .landing { grid-template-columns: 1fr; }
