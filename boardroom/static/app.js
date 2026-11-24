@@ -336,8 +336,8 @@ function marketingSections() {
     <section class="lp-section lp-pricing" aria-labelledby="pricing-title">
       <p class="lp-kicker">Pricing</p>
       <h2 id="pricing-title">Start free. Upgrade when it earns its seat.</h2>
-      <div class="plans">
-        <article class="plan">
+      <div class="price-plans">
+        <article class="price-plan">
           <h3>Free</h3>
           <p class="price"><b>$0</b> forever</p>
           <ul>
@@ -348,7 +348,7 @@ function marketingSections() {
           </ul>
           <button class="btn btn-block lp-start" type="button">Start free</button>
         </article>
-        <article class="plan pro">
+        <article class="price-plan pro">
           <span class="badge">Most popular</span>
           <h3>Pro</h3>
           <p class="price"><b>${esc(state.config.pro_price.split("/")[0])}</b>${state.config.pro_price.includes("/") ? ` / ${esc(state.config.pro_price.split("/").slice(1).join("/"))}` : ""}</p>
@@ -443,6 +443,7 @@ function renderLanding(tab = "signup") {
     try {
       state.user = await api(tab === "signup" ? "/api/signup" : "/api/login", { method: "POST", body: fd });
       await enterApp();
+      if (tab === "signup") showTour();
     } catch (err) {
       errEl.textContent = err.message;
       btn.disabled = false;
@@ -566,15 +567,33 @@ function renderHistory() {
     el.innerHTML = `<h2>Your meetings</h2><p class="empty-history">No meetings match “${esc(state.filter.trim())}”.</p>`;
     return;
   }
-  el.innerHTML = `<h2>${q ? `${shown.length} found` : "Your meetings"}</h2>` + shown.map((m) => {
+  const item = (m) => {
     const pct = m.total_steps ? Math.round((100 * m.done_steps) / m.total_steps) : 0;
     const meta = m.status === "done"
       ? `<span class="mini-bar"><i data-w="${pct}"></i></span><span>${m.done_steps}/${m.total_steps}</span>${m.outcome ? `<span class="out out-${esc(m.outcome)}">${esc((OUTCOMES.find(([k]) => k === m.outcome) || ["", ""])[1])}</span>` : isDue(m.review_at) ? '<span class="due">Review due</span>' : ""}`
       : `<span>${m.status === "running" ? "In session" : "Unfinished"}</span>`;
-    return `<a href="#/m/${m.id}" ${state.meetingId === m.id ? 'aria-current="page"' : ""}>
-      <div class="q">${esc(m.headline || m.question)}</div>
+    return `<a href="#/m/${m.id}" ${state.meetingId === m.id ? 'aria-current="page"' : ""} ${m.headline ? `title="${esc(m.headline)}"` : ""}>
+      <div class="q">${esc(m.question)}</div>
       <div class="meta"><span>${timeAgo(m.created_at)}</span>${meta}</div></a>`;
-  }).join("");
+  };
+  if (q) {
+    el.innerHTML = `<h2>${shown.length} found</h2>` + shown.map(item).join("");
+  } else {
+    // Group by recency, like a well-kept inbox.
+    const day = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    const today = day(new Date());
+    const bucket = (iso) => {
+      const diff = Math.round((today - day(new Date(iso))) / 86400000);
+      return diff <= 0 ? "Today" : diff === 1 ? "Yesterday" : diff < 7 ? "Previous 7 days" : diff < 30 ? "Previous 30 days" : "Earlier";
+    };
+    let html = "", current = "";
+    for (const m of [...shown].sort((x, y) => (x.created_at < y.created_at ? 1 : -1))) {
+      const b = bucket(m.created_at);
+      if (b !== current) { html += `<h2>${b}</h2>`; current = b; }
+      html += item(m);
+    }
+    el.innerHTML = html;
+  }
   applyStyles(el);
 }
 
@@ -894,6 +913,7 @@ function renderComposer(prefill) {
   const grow = () => { q.style.height = "auto"; q.style.height = `${Math.min(q.scrollHeight + 2, 420)}px`; };
   q.addEventListener("input", () => { state.draft.question = q.value; grow(); });
   if (q.value) grow();
+  typePlaceholder(q);
   view.querySelectorAll("[data-focus]").forEach((b) => b.addEventListener("click", () => {
     state.focus = b.dataset.focus;
     view.querySelectorAll("[data-focus]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
@@ -1128,6 +1148,7 @@ function renderLive() {
     view.dataset.layout = layoutKey;
     applyStyles(view);
     animateNew(view);
+    clampLong(view);
     bindMeetingActions(view, live);
     return;
   }
@@ -1146,6 +1167,7 @@ function renderLive() {
       const r = live.remarks[a.key][round];
       card.querySelector(".state").outerHTML = stateBadge(r);
       card.classList.toggle("speaking", !r.done && !!r.text);
+      if (r.done) clampLong(card.parentElement);
       card.querySelector(".body").outerHTML = remarkBody(r);
       const src = card.querySelector(".sources");
       if (r.sources.length && !src) card.insertAdjacentHTML("beforeend", sourcesHtml(r.sources));
@@ -1492,7 +1514,7 @@ function bindMeetingActions(view, m) {
       updatePlanProgress(view, m.steps);
       try {
         await api(`/api/steps/${id}`, { method: "PATCH", body: { done: box.checked } });
-        if (m.steps.length && m.steps.every((s) => s.done)) toast("Plan complete. Well done.");
+        if (m.steps.length && m.steps.every((s) => s.done)) { toast("Plan complete. Well done."); confetti(); }
         refreshSidebar();
       } catch (err) {
         box.checked = !box.checked;
@@ -1550,6 +1572,7 @@ async function loadMeeting(id) {
     + (stalled ? errorBox(m.status === "running" ? "This meeting is still in session. Refresh in a moment to see the result." : "This meeting didn't finish.") : "");
   applyStyles(view);
   animateNew(view);
+  clampLong(view);
   bindMeetingActions(view, m);
 }
 
@@ -1761,6 +1784,122 @@ async function renderShared(token, sample = false) {
     </div>`;
   applyStyles($app);
   animateNew($app);
+  clampLong($app);
+}
+
+/* ---------- delight & polish --------------------------------------------- */
+
+const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* The empty question box types out example questions, one after another. */
+let placeholderTimer = null;
+function typePlaceholder(q) {
+  clearTimeout(placeholderTimer);
+  if (reducedMotion()) return;
+  let n = 0, i = 0;
+  const step = () => {
+    if (!q.isConnected) return;
+    if (q.value) { placeholderTimer = setTimeout(step, 1500); return; }  // they're typing: wait
+    const text = EXAMPLES[n % EXAMPLES.length];
+    i += 1;
+    q.setAttribute("placeholder", text.slice(0, i));
+    if (i < text.length) { placeholderTimer = setTimeout(step, 38); return; }
+    placeholderTimer = setTimeout(() => { n += 1; i = 0; step(); }, 2600);
+  };
+  placeholderTimer = setTimeout(step, 900);
+}
+
+/* Fold very long remarks behind "Read more". */
+function clampLong(root) {
+  if (!root) return;
+  root.querySelectorAll(".advisor-card .body.prose:not([data-clamp-checked])").forEach((body) => {
+    if (body.classList.contains("caret")) return;  // still streaming
+    body.dataset.clampChecked = "1";
+    if (body.scrollHeight < 300) return;
+    body.classList.add("clamped");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "link read-more";
+    btn.setAttribute("aria-expanded", "false");
+    btn.textContent = "Read more";
+    btn.addEventListener("click", () => {
+      const open = !body.classList.toggle("clamped");
+      btn.textContent = open ? "Show less" : "Read more";
+      btn.setAttribute("aria-expanded", String(open));
+    });
+    body.after(btn);
+  });
+}
+
+/* A short burst of confetti, for finishing a whole plan. */
+function confetti() {
+  if (reducedMotion()) return;
+  const canvas = document.createElement("canvas");
+  canvas.className = "confetti";
+  canvas.setAttribute("aria-hidden", "true");
+  const dpr = devicePixelRatio || 1;
+  canvas.width = innerWidth * dpr; canvas.height = innerHeight * dpr;
+  document.body.appendChild(canvas);
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+  const colors = ["#c9a96e", "#3b82f6", "#ef4444", "#f59e0b", "#10b981", "#8b5cf6"];
+  const parts = Array.from({ length: 140 }, () => ({
+    x: innerWidth / 2 + (Math.random() - 0.5) * 140, y: innerHeight * 0.55,
+    vx: (Math.random() - 0.5) * 13, vy: -Math.random() * 15 - 6,
+    w: 6 + Math.random() * 6, h: 3 + Math.random() * 4, r: Math.random() * Math.PI, vr: (Math.random() - 0.5) * 0.35,
+    c: colors[Math.floor(Math.random() * colors.length)],
+  }));
+  const start = performance.now();
+  const frame = (t) => {
+    const age = (t - start) / 1000;
+    ctx.clearRect(0, 0, innerWidth, innerHeight);
+    for (const p of parts) {
+      p.vy += 0.42; p.vx *= 0.99; p.x += p.vx; p.y += p.vy; p.r += p.vr;
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r);
+      ctx.globalAlpha = Math.max(0, 1 - age / 2.2);
+      ctx.fillStyle = p.c; ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h); ctx.restore();
+    }
+    if (age < 2.3) requestAnimationFrame(frame); else canvas.remove();
+  };
+  requestAnimationFrame(frame);
+}
+
+/* Three quick slides for brand-new accounts. */
+function showTour() {
+  try { if (localStorage.getItem("toured")) return; localStorage.setItem("toured", "1"); } catch (_) { /* fine */ }
+  const by = Object.fromEntries(state.config.board.map((a) => [a.key, a]));
+  const av = (k) => `<span class="avatar" data-c="${by[k].color}">${avatarInner(by[k])}</span>`;
+  const slides = [
+    { title: "Meet your board", body: "Four specialists look at every decision from a different angle: the facts, the risks, the options and the plan.", art: `<div class="tour-art">${["analyst", "skeptic", "strategist", "operator"].map(av).join("")}</div>` },
+    { title: "They debate. The Chair decides.", body: "Watch them weigh in live. Then the Chair hands you a verdict, a confidence score and the options compared.", art: `<div class="tour-art">${av("chair")}<div class="vis-ring"><b>78%</b></div></div>` },
+    { title: "A plan you'll actually follow", body: "Tick off steps as you go. On the review date we'll nudge you to check back, and you can ask any advisor a follow-up.", art: `<div class="tour-art vis-verdict"><ul><li><span class="lp-tick">${ICON.check}</span><span></span></li><li><span class="lp-tick">${ICON.check}</span><span></span></li><li class="open"><i></i><span></span></li></ul></div>` },
+  ];
+  let i = 0;
+  const back = document.createElement("div");
+  back.className = "modal-back";
+  const close = openModal(back);
+  const paint = () => {
+    const sl = slides[i];
+    back.innerHTML = `<div class="modal tour" role="dialog" aria-modal="true" aria-labelledby="tour-title">
+      ${sl.art}
+      <h2 id="tour-title">${sl.title}</h2>
+      <p>${sl.body}</p>
+      <div class="tour-foot">
+        <div class="dots" aria-hidden="true">${slides.map((_, k) => `<i class="${k === i ? "on" : ""}"></i>`).join("")}</div>
+        <span class="sr-only">Step ${i + 1} of ${slides.length}</span>
+        <button class="btn btn-ghost" id="tour-skip">${i === slides.length - 1 ? "Close" : "Skip"}</button>
+        <button class="btn btn-primary" id="tour-next">${i === slides.length - 1 ? "Convene my first board" : "Next"}</button>
+      </div></div>`;
+    applyStyles(back);
+    back.querySelector("#tour-skip").addEventListener("click", close);
+    back.querySelector("#tour-next").addEventListener("click", () => {
+      if (i < slides.length - 1) { i += 1; paint(); return; }
+      close();
+      setTimeout(() => document.getElementById("question")?.focus(), 50);
+    });
+    back.querySelector("#tour-next").focus();
+  };
+  paint();
 }
 
 /* ---------- verdict pill ---------------------------------------------------- */
