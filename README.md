@@ -40,6 +40,8 @@ Boardroom gives anyone a private board of AI advisors. You bring a decision ("Sh
 - **Installable.** Add Boardroom to a phone's home screen and it opens like a native app (web app manifest and icons).
 - **Polished UI.** Responsive from phone to desktop, light and dark themes, keyboard shortcuts (⌘/Ctrl+Enter), and no build step.
 - **Designed to feel premium.** Self-hosted Inter and Newsreader fonts (identical on every device), an animated boardroom scene on the landing page, glass headers, depth and soft light, a glow on whichever advisor is speaking, and a verdict that reveals with a filling confidence ring and growing option bars. All motion respects "reduce motion".
+- **Command palette.** Press ⌘K / Ctrl+K to jump to any meeting or run an action (new meeting, theme, settings, invite, dashboard), all from the keyboard.
+- **Sleek details.** Smooth page transitions (View Transitions API), an icon toolbar with tooltips, a "verdict is in" pill when the verdict lands below the fold, shimmering skeletons, a question box that grows as you type, and an animated sun/moon theme toggle.
 - **Accessible.** Audited with axe-core (WCAG 2.1 AA plus best practices) on every screen in both themes, with zero violations: compliant text contrast, labelled controls, landmarks, ordered headings, keyboard-trapped dialogs, and reduced-motion support.
 - **Graceful failures.** If one advisor hits an error, they sit the round out and the meeting continues.
 - **Owner dashboard.** Revenue estimate, users, active users, meetings, failure rate, shared verdicts, and the API cost of every meeting (tokens and web searches turned into dollars), with daily charts. Visible only to admin emails.

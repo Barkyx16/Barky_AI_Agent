@@ -86,12 +86,16 @@ function applyStyles(root = document) {
   root.querySelectorAll("[data-p]").forEach((el) => el.style.setProperty("--p", el.dataset.p));
 }
 
-function toast(msg) {
+function toast(msg, kind) {
   const el = document.getElementById("toast");
-  el.textContent = msg;
+  kind = kind || (/couldn|can't|failed|error|invalid|too many|incorrect|dropped|blocked/i.test(msg) ? "error" : "ok");
+  el.className = `toast-${kind}`;
+  el.innerHTML = `<span class="toast-icon">${kind === "error" ? ICON.alert : ICON.check}</span><span></span>`;
+  el.lastElementChild.textContent = msg;
+  void el.offsetWidth;  // restart the entrance transition
   el.classList.add("show");
   clearTimeout(toast.t);
-  toast.t = setTimeout(() => el.classList.remove("show"), 2600);
+  toast.t = setTimeout(() => el.classList.remove("show"), kind === "error" ? 4200 : 2600);
 }
 
 function todayIso() {
@@ -168,6 +172,23 @@ const ICON_THEME = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" 
 const ICON_GEAR = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>`;
 const ICON_MIC = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>`;
 const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+const svg = (d, size = 16) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const ICON = {
+  share: svg('<path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/><path d="M12 3v12"/><path d="m7 8 5-5 5 5"/>'),
+  copy: svg('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/>'),
+  print: svg('<path d="M7 9V3h10v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M7 14h10v7H7z"/>'),
+  trash: svg('<path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/>'),
+  search: svg('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'),
+  arrowDown: svg('<path d="M12 5v14"/><path d="m6 13 6 6 6-6"/>', 15),
+  check: svg('<path d="m5 12 5 5 9-10"/>', 15),
+  info: svg('<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>', 15),
+  alert: svg('<path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/>', 15),
+  moon: svg('<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>'),
+  sun: svg('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'),
+  doc: svg('<path d="M6 3h9l3 3v15H6z"/><path d="M9 11h6M9 15h6"/>'),
+  bolt: svg('<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>'),
+  gear: svg('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
+};
 const ICON_MENU = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>`;
 const ICON_PLUS = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>`;
 
@@ -420,7 +441,7 @@ function renderShell() {
         <a class="btn btn-primary btn-block" href="#/new">${ICON_PLUS} New meeting</a>
         ${state.user.is_admin ? `<a class="admin-link" href="#/admin">Owner dashboard</a>` : ""}
         <label class="sr-only" for="search">Search meetings</label>
-        <input class="input search" id="search" type="search" placeholder="Search meetings" autocomplete="off">
+        <div class="search-wrap">${ICON.search}<input class="input search" id="search" type="search" placeholder="Search meetings" autocomplete="off"><button class="kbd-hint" id="open-palette" type="button" aria-label="Open command palette" title="Command palette">${navigator.platform.includes("Mac") ? "⌘" : "Ctrl "}K</button></div>
         <nav class="history" id="history"></nav>
         <div class="account" id="account"></div>
       </aside>
@@ -436,6 +457,7 @@ function renderShell() {
     </div>`;
   document.getElementById("menu").addEventListener("click", () => document.getElementById("shell").classList.add("nav-open"));
   document.getElementById("scrim").addEventListener("click", closeNav);
+  document.getElementById("open-palette").addEventListener("click", openPalette);
   document.getElementById("search").addEventListener("input", (e) => { state.filter = e.target.value; renderHistory(); });
   renderHistory();
   renderAccount();
@@ -484,7 +506,7 @@ function renderAccount() {
     </div>
     ${state.user.can_manage_billing ? `<button class="btn btn-ghost btn-sm btn-block" id="billing">Manage billing</button>` : ""}
     <div class="account-row">
-      <span><button class="btn btn-ghost btn-sm" id="settings" aria-label="Account settings" title="Account settings">${ICON_GEAR}</button><button class="btn btn-ghost btn-sm" id="theme" aria-label="Toggle theme" title="Toggle theme">${ICON_THEME}</button></span>
+      <span><button class="btn btn-ghost btn-sm" id="settings" aria-label="Account settings" title="Account settings">${ICON_GEAR}</button><button class="btn btn-ghost btn-sm theme-toggle" id="theme" aria-label="Toggle theme" title="Toggle theme"><span class="i-sun">${ICON.sun}</span><span class="i-moon">${ICON.moon}</span></button></span>
       <button class="btn btn-ghost btn-sm" id="logout">Sign out</button>
     </div>`;
   applyStyles(el);
@@ -644,6 +666,16 @@ async function refreshSidebar() {
 
 function route() {
   if (!state.user) return;
+  const go = () => routeNow();
+  // Smooth cross-fade between screens where the browser supports View Transitions.
+  if (document.startViewTransition && !matchMedia("(prefers-reduced-motion: reduce)").matches && document.getElementById("view")) {
+    document.startViewTransition(go);
+  } else {
+    go();
+  }
+}
+
+function routeNow() {
   closeNav();
   if (location.hash === "#/billing/success") {
     history.replaceState(null, "", "#/new");
@@ -771,7 +803,9 @@ function renderComposer(prefill) {
   setHint();
   q.focus();
   q.setSelectionRange(q.value.length, q.value.length);
-  q.addEventListener("input", () => { state.draft.question = q.value; });
+  const grow = () => { q.style.height = "auto"; q.style.height = `${Math.min(q.scrollHeight + 2, 420)}px`; };
+  q.addEventListener("input", () => { state.draft.question = q.value; grow(); });
+  if (q.value) grow();
   view.querySelectorAll("[data-focus]").forEach((b) => b.addEventListener("click", () => {
     state.focus = b.dataset.focus;
     view.querySelectorAll("[data-focus]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
@@ -963,6 +997,7 @@ function handleEvent(live, ev) {
     case "verdict":
       live.verdict = ev.verdict;
       live.chair = "done";
+      if (state.meetingId === live.id) requestAnimationFrame(() => requestAnimationFrame(verdictPill));
       break;
     case "done":
       live.steps = ev.steps;
@@ -1045,10 +1080,12 @@ function meetingLayout(m, rounds, cardsFor) {
       </div>
       <div class="head-actions">
         ${m.readonly ? "" : `
-        <button class="btn btn-sm" data-act="share" ${m.running || !m.shareable ? "disabled" : ""}>${m.share_token ? "Shared" : "Share"}</button>
-        <button class="btn btn-ghost btn-sm" data-act="copy" ${m.running ? "disabled" : ""}>Copy summary</button>
-        <button class="btn btn-ghost btn-sm" data-act="print" ${m.running ? "disabled" : ""}>Print</button>
-        <button class="btn btn-ghost btn-sm" data-act="delete" ${m.running ? "disabled" : ""}>Delete</button>`}
+        <div class="toolbar" role="toolbar" aria-label="Meeting actions">
+          <button class="tool share ${m.share_token ? "is-on" : ""}" data-act="share" data-tip="${m.share_token ? "Shared · manage link" : "Share"}" aria-label="${m.share_token ? "Shared, manage link" : "Share"}" ${m.running || !m.shareable ? "disabled" : ""}>${ICON.share}<span>${m.share_token ? "Shared" : "Share"}</span></button>
+          <button class="tool" data-act="copy" data-tip="Copy summary" aria-label="Copy summary" ${m.running ? "disabled" : ""}>${ICON.copy}</button>
+          <button class="tool" data-act="print" data-tip="Print or save as PDF" aria-label="Print or save as PDF" ${m.running ? "disabled" : ""}>${ICON.print}</button>
+          <button class="tool danger" data-act="delete" data-tip="Delete meeting" aria-label="Delete meeting" ${m.running ? "disabled" : ""}>${ICON.trash}</button>
+        </div>`}
       </div>
     </div>
     ${rounds.map((r) => `
@@ -1408,6 +1445,13 @@ async function loadMeeting(id) {
   bindMeetingActions(view, m);
 }
 
+function markShared(button, on) {
+  button.classList.toggle("is-on", on);
+  button.querySelector("span").textContent = on ? "Shared" : "Share";
+  button.dataset.tip = on ? "Shared · manage link" : "Share";
+  button.setAttribute("aria-label", on ? "Shared, manage link" : "Share");
+}
+
 function showShare(m, button) {
   const back = document.createElement("div");
   back.className = "modal-back";
@@ -1430,7 +1474,7 @@ function showShare(m, button) {
     back.querySelector("#share-create")?.addEventListener("click", async () => {
       try {
         const { token } = await api(`/api/meetings/${m.id}/share`, { method: "POST" });
-        m.share_token = token; button.textContent = "Shared"; paint();
+        m.share_token = token; markShared(button, true); paint();
       } catch (err) { toast(err.message); }
     });
     back.querySelector("#share-copy")?.addEventListener("click", async () => {
@@ -1440,7 +1484,7 @@ function showShare(m, button) {
     back.querySelector("#share-stop")?.addEventListener("click", async () => {
       try {
         await api(`/api/meetings/${m.id}/share`, { method: "DELETE" });
-        m.share_token = null; button.textContent = "Share"; toast("Link turned off"); close();
+        m.share_token = null; markShared(button, false); toast("Link turned off"); close();
       } catch (err) { toast(err.message); }
     });
     (back.querySelector("#share-copy") || back.querySelector("#share-create")).focus();
@@ -1610,6 +1654,101 @@ async function renderShared(token, sample = false) {
   applyStyles($app);
   animateNew($app);
 }
+
+/* ---------- verdict pill ---------------------------------------------------- */
+
+/* If the verdict lands below the fold while you're reading, offer a shortcut to it. */
+function verdictPill() {
+  const target = document.querySelector(".verdict");
+  if (!target || document.getElementById("verdict-pill")) return;
+  const rect = target.getBoundingClientRect();
+  if (rect.top < innerHeight - 80) return;  // already on screen
+  const pill = document.createElement("button");
+  pill.id = "verdict-pill";
+  pill.type = "button";
+  pill.innerHTML = `<span class="dot"></span>The verdict is in ${ICON.arrowDown}`;
+  document.body.appendChild(pill);
+  const remove = () => { pill.classList.add("leaving"); setTimeout(() => pill.remove(), 250); io.disconnect(); window.removeEventListener("hashchange", remove); };
+  const io = new IntersectionObserver((entries) => { if (entries.some((e) => e.isIntersecting)) remove(); }, { threshold: 0.15 });
+  io.observe(target);
+  pill.addEventListener("click", () => { document.querySelector(".verdict")?.scrollIntoView({ behavior: "smooth", block: "start" }); remove(); });
+  window.addEventListener("hashchange", remove);
+}
+
+/* ---------- command palette -------------------------------------------------- */
+
+function paletteItems() {
+  const items = [
+    { group: "Actions", label: "New meeting", hint: "Start fresh", icon: ICON_PLUS, run: () => { location.hash = "#/new"; } },
+    { group: "Actions", label: "Switch theme", hint: "Light / dark", icon: ICON.moon, run: toggleTheme },
+    { group: "Actions", label: "Invite friends", hint: "Get bonus meetings", icon: ICON.share, run: showInvite },
+    { group: "Actions", label: "Account settings", hint: "Password, emails, data", icon: ICON.gear, run: showSettings },
+  ];
+  if (state.user?.is_admin) items.push({ group: "Actions", label: "Owner dashboard", hint: "Revenue, usage, costs", icon: ICON.bolt, run: () => { location.hash = "#/admin"; } });
+  if (state.user && state.user.usage.plan !== "pro" && !state.config.demo) items.push({ group: "Actions", label: "Upgrade to Pro", hint: state.config.pro_price, icon: ICON.bolt, run: showUpgrade });
+  for (const m of state.meetings) {
+    items.push({ group: "Meetings", label: m.headline || m.question, hint: m.headline ? m.question : timeAgo(m.created_at), icon: ICON.doc, run: () => { location.hash = `#/m/${m.id}`; } });
+  }
+  return items;
+}
+
+function openPalette() {
+  if (!state.user || document.querySelector(".palette")) return;
+  const all = paletteItems();
+  const back = document.createElement("div");
+  back.className = "modal-back palette-back";
+  back.innerHTML = `
+    <div class="palette" role="dialog" aria-modal="true" aria-label="Command palette">
+      <div class="palette-search">${ICON.search}
+        <label class="sr-only" for="palette-q">Search meetings and actions</label>
+        <input id="palette-q" autocomplete="off" placeholder="Search meetings or type a command…" role="combobox" aria-expanded="true" aria-controls="palette-list">
+        <span class="kbd">esc</span>
+      </div>
+      <ul class="palette-list" id="palette-list" role="listbox"></ul>
+      <div class="palette-foot"><span><span class="kbd">↑</span><span class="kbd">↓</span> to move</span><span><span class="kbd">↵</span> to open</span></div>
+    </div>`;
+  const close = openModal(back);
+  const input = back.querySelector("#palette-q");
+  const list = back.querySelector("#palette-list");
+  let shown = all, active = 0;
+  const paint = () => {
+    const q = input.value.trim().toLowerCase();
+    const words = q.split(/\s+/).filter(Boolean);
+    shown = all.filter((it) => words.every((w) => `${it.label} ${it.hint}`.toLowerCase().includes(w))).slice(0, 30);
+    active = Math.min(active, Math.max(0, shown.length - 1));
+    let group = "";
+    list.innerHTML = shown.length ? shown.map((it, i) => {
+      const head = it.group !== group ? `<li class="palette-group" role="presentation">${esc(it.group)}</li>` : "";
+      group = it.group;
+      return `${head}<li role="option" id="pal-${i}" data-i="${i}" aria-selected="${i === active}" class="${i === active ? "active" : ""}">
+        <span class="pi">${it.icon}</span><span class="pl">${esc(it.label)}</span><span class="ph">${esc(it.hint || "")}</span></li>`;
+    }).join("") : `<li class="palette-empty">Nothing matches “${esc(input.value)}”.</li>`;
+    input.setAttribute("aria-activedescendant", shown.length ? `pal-${active}` : "");
+    list.querySelector(".active")?.scrollIntoView({ block: "nearest" });
+  };
+  const run = (i) => { const it = shown[i]; if (!it) return; close(); setTimeout(it.run, 0); };
+  input.addEventListener("input", () => { active = 0; paint(); });
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown") { e.preventDefault(); active = (active + 1) % Math.max(1, shown.length); paint(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); active = (active - 1 + shown.length) % Math.max(1, shown.length); paint(); }
+    else if (e.key === "Enter") { e.preventDefault(); run(active); }
+  });
+  list.addEventListener("mousemove", (e) => {
+    const li = e.target.closest("[data-i]");
+    if (li && Number(li.dataset.i) !== active) { active = Number(li.dataset.i); paint(); }
+  });
+  list.addEventListener("click", (e) => { const li = e.target.closest("[data-i]"); if (li) run(Number(li.dataset.i)); });
+  paint();
+  input.focus();
+}
+
+document.addEventListener("keydown", (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k" && state.user) {
+    e.preventDefault();
+    const open = document.querySelector(".palette-back");
+    if (open) open.closeModal(); else openPalette();
+  }
+});
 
 /* ---------- boot ---------------------------------------------------------- */
 
