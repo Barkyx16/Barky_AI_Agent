@@ -189,6 +189,17 @@ const ICON = {
   bolt: svg('<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>'),
   gear: svg('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
 };
+/* Each advisor's glyph; guests (named by the user) keep their initials. */
+const GLYPH = {
+  analyst: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.6-4.6"/><path d="M8 12.5v-2M10.5 12.5V8M13 12.5v-3"/>',
+  skeptic: '<path d="M12 3 4.5 6v5.5c0 4.6 3.1 8.2 7.5 9.5 4.4-1.3 7.5-4.9 7.5-9.5V6z"/><path d="M12 8v4.5M12 15.5h.01"/>',
+  strategist: '<circle cx="12" cy="12" r="8.5"/><path d="m15.5 8.5-2.2 4.8-4.8 2.2 2.2-4.8z"/>',
+  operator: '<path d="M9 6h11M9 12h11M9 18h11"/><path d="m3.5 6 1.2 1.2L7 5M3.5 12l1.2 1.2L7 11M3.5 18l1.2 1.2L7 17"/>',
+  chair: '<path d="m13.5 4.5 6 6M10.5 7.5l6 6M12 6l4.5 4.5M14.5 12.5 6 21l-3-3 8.5-8.5"/><path d="M14 20h7"/>',
+};
+const avatarInner = (a) => GLYPH[a.key]
+  ? `<svg viewBox="0 0 24 24" width="52%" height="52%" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${GLYPH[a.key]}</svg>`
+  : esc(a.initials);
 const ICON_MENU = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>`;
 const ICON_PLUS = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>`;
 
@@ -292,16 +303,88 @@ function animateNew(root) {
   });
 }
 
+/* Below the fold on the landing page: how it works, pricing, and a last nudge. */
+function marketingSections() {
+  const L = state.config.limits;
+  const by = Object.fromEntries(state.config.board.map((a) => [a.key, a]));
+  const mini = (k) => `<span class="avatar sm" data-c="${by[k].color}">${avatarInner(by[k])}</span>`;
+  const showPricing = state.config.billing || state.config.demo;
+  const tick = `<span class="lp-tick">${ICON.check}</span>`;
+  return `
+    <section class="lp-section lp-how" aria-labelledby="how-title">
+      <p class="lp-kicker">How it works</p>
+      <h2 id="how-title">A whole board, in about a minute.</h2>
+      <div class="lp-cards">
+        <article class="lp-card">
+          <div class="lp-visual vis-ask"><div class="vis-chips"><i>Career</i><i class="on">Money</i><i>Business</i></div><div class="vis-line"></div><div class="vis-line short"></div><div class="vis-btn">Convene the board</div></div>
+          <h3><span class="lp-num">1</span>Bring the decision</h3>
+          <p>Type it or say it. Add background, pick a focus, or seat a guest like your future self.</p>
+        </article>
+        <article class="lp-card">
+          <div class="lp-visual vis-debate">${["analyst", "skeptic", "strategist", "operator"].map((k) => `<div class="vis-row">${mini(k)}<div class="vis-line"></div></div>`).join("")}</div>
+          <h3><span class="lp-num">2</span>Watch the debate</h3>
+          <p>Four advisors weigh in at once, with live research, real risks, smarter options and a plan.</p>
+        </article>
+        <article class="lp-card">
+          <div class="lp-visual vis-verdict"><div class="vis-ring"><b>78%</b></div><ul><li>${tick}<span></span></li><li>${tick}<span></span></li><li class="open"><i></i><span></span></li></ul></div>
+          <h3><span class="lp-num">3</span>Get the verdict</h3>
+          <p>A clear call, the options scored, your first move, and a plan you can tick off. With reminders.</p>
+        </article>
+      </div>
+    </section>
+    ${showPricing ? `
+    <section class="lp-section lp-pricing" aria-labelledby="pricing-title">
+      <p class="lp-kicker">Pricing</p>
+      <h2 id="pricing-title">Start free. Upgrade when it earns its seat.</h2>
+      <div class="plans">
+        <article class="plan">
+          <h3>Free</h3>
+          <p class="price"><b>$0</b> forever</p>
+          <ul>
+            <li>${tick}${Number(L.free_daily_meetings)} board meetings a day</li>
+            <li>${tick}${Number(L.free_deep_per_week)} deep debate a week</li>
+            <li>${tick}${Number(L.free_daily_asks)} questions to advisors a day</li>
+            <li>${tick}Plans, reminders and share links</li>
+          </ul>
+          <button class="btn btn-block lp-start" type="button">Start free</button>
+        </article>
+        <article class="plan pro">
+          <span class="badge">Most popular</span>
+          <h3>Pro</h3>
+          <p class="price"><b>${esc(state.config.pro_price.split("/")[0])}</b>${state.config.pro_price.includes("/") ? ` / ${esc(state.config.pro_price.split("/").slice(1).join("/"))}` : ""}</p>
+          <ul>
+            <li>${tick}Up to ${Number(L.pro_daily_meetings)} meetings a day</li>
+            <li>${tick}Unlimited deep debates</li>
+            <li>${tick}${Number(L.pro_daily_asks)} questions to advisors a day</li>
+            <li>${tick}Everything in Free</li>
+          </ul>
+          <button class="btn btn-primary btn-block lp-start" type="button">Start free, upgrade anytime</button>
+        </article>
+      </div>
+    </section>` : ""}
+    <section class="lp-section lp-final">
+      <h2>What's the decision you keep putting off?</h2>
+      <p>Bring it to the board. Your first meeting takes about a minute.</p>
+      <button class="btn btn-primary lp-start" type="button">Convene your board</button>
+    </section>
+    <footer class="lp-footer">
+      <div class="brand"><img src="/static/favicon.svg" alt=""> Boardroom</div>
+      <nav><a href="/#/sample">Sample meeting</a><a href="/terms">Terms</a><a href="/privacy">Privacy</a></nav>
+      <p>AI-generated perspectives, not professional advice. © ${new Date().getFullYear()} Boardroom</p>
+    </footer>`;
+}
+
 function renderLanding(tab = "signup") {
   const ref = pendingRef();
   const seat = (a) => `<div class="seat-pos pos-${a.key}" data-seat="${a.key}">
-      <div class="avatar" data-c="${a.color}">${esc(a.initials)}</div><span>${esc(a.name.replace(/^The /, ""))}</span></div>`;
+      <div class="avatar" data-c="${a.color}">${avatarInner(a)}</div><span>${esc(a.name.replace(/^The /, ""))}</span></div>`;
   const scene = `<div class="scene" role="img" aria-label="The board around a table: the Analyst, the Skeptic, the Strategist and the Operator debate while the Chair listens.">
       <div class="table"><p class="line" id="scene-line" aria-hidden="true"></p></div>
       ${state.config.board.map(seat).join("")}
     </div>`;
   $app.innerHTML = `
-    <main class="landing">
+    <main class="landing-page">
+    <div class="landing">
       <section class="landing-hero">
         <div class="brand"><img src="/static/favicon.svg" alt=""> Boardroom</div>
         <h1>Every hard decision deserves a board meeting.</h1>
@@ -332,15 +415,20 @@ function renderLanding(tab = "signup") {
           ${tab === "signup" ? `<p class="fine">By creating an account you agree to the <a href="/terms" target="_blank">Terms</a> and <a href="/privacy" target="_blank">Privacy Policy</a>. Boardroom gives AI-generated perspectives, not professional advice.</p>` : ""}
         </div>
       </section>
+    </div>
+    ${marketingSections()}
     </main>`;
   applyStyles($app);
   runScene();
   $app.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => renderLanding(b.dataset.tab)));
   document.getElementById("forgot")?.addEventListener("click", renderForgot);
-  document.getElementById("jump-signup")?.addEventListener("click", () => {
-    document.querySelector(".landing-auth").scrollIntoView({ behavior: "smooth" });
+  const toSignup = () => {
+    if (tab !== "signup") { renderLanding("signup"); window.scrollTo(0, 0); }
+    document.querySelector(".landing-auth").scrollIntoView({ behavior: "smooth", block: "center" });
     setTimeout(() => document.querySelector("#auth-form input")?.focus({ preventScroll: true }), 450);
-  });
+  };
+  document.getElementById("jump-signup")?.addEventListener("click", toSignup);
+  $app.querySelectorAll(".lp-start").forEach((b) => b.addEventListener("click", toSignup));
   const form = document.getElementById("auth-form");
   // On phones, focusing would jump past the hero and open the keyboard straight away.
   if (matchMedia("(min-width: 981px)").matches) form.querySelector("input").focus();
@@ -534,7 +622,7 @@ function showUpgrade() {
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="up-title">
       <span class="badge">Boardroom Pro</span>
       <h2 id="up-title">A board that's always in session</h2>
-      <ul><li>Unlimited meetings every day</li><li>Deep debates: advisors rebut each other before the Chair rules</li><li>Priority access during busy hours</li></ul>
+      <ul><li>Up to ${Number(state.config.limits.pro_daily_meetings)} meetings a day (instead of ${Number(state.config.limits.free_daily_meetings)})</li><li>Unlimited deep debates: advisors rebut each other before the Chair rules</li><li>${Number(state.config.limits.pro_daily_asks)} questions to advisors a day</li></ul>
       ${state.config.billing
         ? `<p class="price"><strong>${esc(state.config.pro_price)}</strong> · cancel anytime</p>
            <p class="error-text" id="up-error"></p>
@@ -1028,6 +1116,7 @@ function renderLive() {
   if (view.dataset.layout !== layoutKey) {
     view.innerHTML = meetingLayout({
       question: live.question, context: live.context, mode: live.mode, focus: live.focus, created_at: null, running: live.running,
+      stage: live.chair !== "waiting" ? "chair" : live.rounds.length > 1 ? "rebuttal" : "opening",
       shareable: !!live.verdict, share_token: live.share_token,
     }, live.rounds, (round) => seatsFor(live.guest).map((a) => {
       const r = live.remarks[a.key][round];
@@ -1066,6 +1155,15 @@ function renderLive() {
 
 /* ---------- meeting rendering (shared by live & saved) ------------------- */
 
+/* Live progress: Opening remarks → (Rebuttals) → Verdict. */
+function stepper(m) {
+  const steps = [["opening", "Opening remarks"], ...(m.mode === "deep" ? [["rebuttal", "Rebuttals"]] : []), ["chair", "Verdict"]];
+  const at = steps.findIndex(([k]) => k === m.stage);
+  return `<ol class="stepper" aria-label="Meeting progress">${steps.map(([k, label], i) => `
+    <li class="${i < at ? "done" : i === at ? "now" : ""}" ${i === at ? 'aria-current="step"' : ""}>
+      <span class="bullet">${i < at ? ICON.check : i + 1}</span><span>${label}</span></li>`).join("")}</ol>`;
+}
+
 function meetingLayout(m, rounds, cardsFor) {
   const when = m.created_at ? timeAgo(m.created_at) : m.readonly ? "Example" : "Now";
   const focusLabel = (state.config.focus_areas || []).find((f) => f.key === m.focus)?.label;
@@ -1088,6 +1186,7 @@ function meetingLayout(m, rounds, cardsFor) {
         </div>`}
       </div>
     </div>
+    ${m.running ? stepper(m) : ""}
     ${rounds.map((r) => `
       <div class="section-title">${r === 1 ? "Opening remarks" : "Rebuttals"}</div>
       <div class="grid">${cardsFor(r)}</div>`).join("")}`;
@@ -1098,10 +1197,19 @@ function stateBadge(r) {
   return `<span class="state ${r.done ? (r.text ? "done" : "out") : ""}"><span class="dot"></span>${esc(label)}</span>`;
 }
 
+/* While text is still streaming, hide a bold/italic marker whose closing half hasn't arrived. */
+function tidyPartial(text) {
+  if ((text.match(/\*\*/g) || []).length % 2) {
+    const i = text.lastIndexOf("**");
+    text = text.slice(0, i) + text.slice(i + 2);
+  }
+  return text.replace(/(^|\s)[*_]$/, "$1");
+}
+
 function remarkBody(r) {
   if (!r.text && r.done) return `<div class="body muted">Didn't speak this round.</div>`;
   if (!r.text) return `<div class="body skeleton" aria-hidden="true"><i></i><i></i><i></i></div>`;
-  return `<div class="body prose ${r.done ? "" : "caret"}">${md(r.text)}</div>`;
+  return `<div class="body prose ${r.done ? "" : "caret"}">${md(r.done ? r.text : tidyPartial(r.text))}</div>`;
 }
 
 function sourcesHtml(sources) {
@@ -1116,7 +1224,7 @@ function sourcesHtml(sources) {
 
 function remarkCard(a, r, round, ask = null) {
   return `<article class="card advisor-card ${!r.done && r.text ? "speaking" : ""}" data-c="${a.color}" data-card="${a.key}-${round}" data-anim="${esc(animScope)}-${a.key}-${round}">
-    <div class="advisor-head"><div class="avatar" data-c="${a.color}">${esc(a.initials)}</div>
+    <div class="advisor-head"><div class="avatar" data-c="${a.color}">${avatarInner(a)}</div>
       <div><div class="name">${esc(a.name)}</div><div class="role">${esc(a.role)}</div></div>
       ${stateBadge(r)}</div>
     ${remarkBody(r)}
@@ -1175,7 +1283,7 @@ async function askAdvisor(m, key, question, card) {
         buffer = buffer.slice(idx + 2);
         if (!line) continue;
         const ev = JSON.parse(line.slice(6));
-        if (ev.type === "delta") { text += ev.text; bubble.innerHTML = md(text); }
+        if (ev.type === "delta") { text += ev.text; bubble.innerHTML = md(tidyPartial(text)); }
         else if (ev.type === "error") { bubble.innerHTML = `<span class="muted">${esc(ev.message)}</span>`; }
         else if (ev.type === "done") {
           ok = true;
@@ -1197,7 +1305,7 @@ function chairSection(m) {
   if (m.chair === "deliberating") {
     return `<div class="section-title">The verdict</div>
       <div class="card chair-wait">
-        <div class="chair-wait-head"><div class="avatar" data-c="${chair.color}">${chair.initials}</div><p id="chair-status">${m.draft && m.draft.headline ? "The Chair is ruling…" : "The Chair is weighing the arguments…"}</p><div class="spinner"></div></div>
+        <div class="chair-wait-head"><div class="avatar" data-c="${chair.color}">${avatarInner(chair)}</div><p id="chair-status">${m.draft && m.draft.headline ? "The Chair is ruling…" : "The Chair is weighing the arguments…"}</p><div class="spinner"></div></div>
         <div class="chair-draft">
           <h2 id="draft-headline">${esc(m.draft?.headline || "")}</h2>
           <p class="why caret-inline" id="draft-verdict">${esc(m.draft?.verdict || "")}</p>
@@ -1250,7 +1358,7 @@ function verdictCard(v, steps, readonly = false, guest = null, reviewAt = null, 
   return `<article class="card verdict" data-anim="${esc(anim)}">
     <div class="verdict-top">
       <div>
-        <div class="who"><div class="avatar sm" data-c="${chair.color}">${chair.initials}</div>The Chair rules</div>
+        <div class="who"><div class="avatar sm" data-c="${chair.color}">${avatarInner(chair)}</div>The Chair rules</div>
         <h2>${esc(v.headline)}</h2>
         <p class="why">${esc(v.verdict)}</p>
       </div>
@@ -1258,7 +1366,7 @@ function verdictCard(v, steps, readonly = false, guest = null, reviewAt = null, 
     </div>
     <div class="votes">${v.votes.map((x) => {
       const a = by[x.advisor];
-      return a ? `<span class="vote" title="${esc(x.reason)}"><span class="avatar sm" data-c="${esc(a.color)}">${esc(a.initials)}</span><span class="pos ${esc(x.position)}">${esc(x.position)}</span><span class="reason">${esc(x.reason)}</span></span>` : "";
+      return a ? `<span class="vote" title="${esc(x.reason)}"><span class="avatar sm" data-c="${esc(a.color)}" title="${esc(a.name)}">${avatarInner(a)}</span><span class="sr-only">${esc(a.name)}:</span><span class="pos ${esc(x.position)}">${esc(x.position)}</span><span class="reason">${esc(x.reason)}</span></span>` : "";
     }).join("")}</div>
     ${optionsChart(v.options)}
     <div class="verdict-cols">

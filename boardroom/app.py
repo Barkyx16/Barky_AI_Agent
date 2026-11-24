@@ -339,6 +339,13 @@ def create_app(
             "password_reset": mailer is not None,
             "reminders": mailer is not None,
             "referral_bonus": settings.referral_bonus,
+            "limits": {
+                "free_daily_meetings": settings.free_daily_limit,
+                "free_deep_per_week": settings.free_deep_per_week,
+                "free_daily_asks": settings.free_daily_asks,
+                "pro_daily_meetings": settings.pro_daily_limit,
+                "pro_daily_asks": settings.pro_daily_asks,
+            },
             "focus_areas": [{"key": k, "label": v[0]} for k, v in FOCUS_AREAS.items()],
         }
 
