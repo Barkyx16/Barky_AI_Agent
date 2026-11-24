@@ -32,7 +32,7 @@ Boardroom gives anyone a private board of AI advisors. You bring a decision ("Sh
 - **Follow-ups.** Reconvene the board on an earlier decision ("What if I wait six months?") with the earlier verdict as context.
 - **Sample meeting.** Visitors can read a full example meeting from the landing page before signing up.
 - **Referrals.** Every user has an invite link. The friend gets bonus meetings when they sign up, and the referrer gets theirs once the friend finishes a real meeting (3 each by default). Bonus meetings are used after the daily free meetings run out, and a cap per referrer limits farming.
-- **Shareable verdicts.** One click creates a public read-only link (`/s/<token>`, with a rich preview card showing the question and verdict in iMessage, WhatsApp, Slack and X) to the debate and verdict, with a sign-up call to action. Private background notes and progress are never shared.
+- **Shareable verdicts.** One click creates a public read-only link (`/s/<token>`). Each shared verdict gets its own preview image, drawn on the server in the app's fonts (question, headline, confidence ring, votes), which shows in iMessage, WhatsApp, Slack and X. Owners can also download the image to post anywhere to the debate and verdict, with a sign-up call to action. Private background notes and progress are never shared.
 - **Accounts and plans.** Email sign-up, a free daily quota, and a Pro plan with unlimited meetings and deep debates.
 - **Demo mode.** Runs with scripted advisors when no API key is set, so anyone can try the full experience.
 - **Voice input.** Tap the mic to speak your question (browsers with built-in speech recognition, such as Chrome, Edge and Safari).
@@ -43,6 +43,7 @@ Boardroom gives anyone a private board of AI advisors. You bring a decision ("Sh
 - **A complete landing page.** Animated hero, a visual "How it works", a Free vs Pro pricing table generated from your actual limits and price, a final call to action, and a footer.
 - **Advisor identities.** Each advisor has its own glyph (magnifier, shield, compass, checklist, gavel), and live meetings show a progress stepper (Opening remarks → Rebuttals → Verdict).
 - **Delightful details.** A three-step welcome tour for new accounts, a question box that types out example questions, long remarks folded behind "Read more", confetti when a plan is finished, and a sidebar grouped by Today / Yesterday / Previous 7 days.
+- **Keyboard first.** `?` shows every shortcut: `N` new meeting, `/` search, `T` theme, plus the ⌘K palette. A slim sticky bar keeps the question in view while you scroll a long meeting.
 - **Command palette.** Press ⌘K / Ctrl+K to jump to any meeting or run an action (new meeting, theme, settings, invite, dashboard), all from the keyboard.
 - **Sleek details.** Smooth page transitions (View Transitions API), an icon toolbar with tooltips, a "verdict is in" pill when the verdict lands below the fold, shimmering skeletons, a question box that grows as you type, and an animated sun/moon theme toggle.
 - **Accessible.** Audited with axe-core (WCAG 2.1 AA plus best practices) on every screen in both themes, with zero violations: compliant text contrast, labelled controls, landmarks, ordered headings, keyboard-trapped dialogs, and reduced-motion support.
@@ -131,6 +132,7 @@ browser ──POST /api/meetings──▶ FastAPI ──▶ meeting.run_meeting(
 - `boardroom/meeting.py`: runs the rounds and merges advisor streams into one event feed.
 - `boardroom/hub.py`: runs each meeting as a background task with a replayable event log, so viewers can attach and detach freely.
 - `boardroom/costs.py`: turns reported token usage into an estimated dollar cost per meeting.
+- `boardroom/cards.py`: 1200×630 verdict share images rendered with Pillow and the bundled fonts.
 - `boardroom/mailer.py`: SMTP email for password resets.
 - `boardroom/billing.py`: Stripe Checkout, customer portal, and webhook signature checks.
 - `boardroom/app.py`: API, auth (with login throttling), quotas, share links, and security headers.

@@ -759,7 +759,7 @@ def test_shared_page_has_link_preview_tags(tmp_path):
     assert '<meta property="og:title" content="“Should I quit? &lt;script&gt;' in page.text
     assert "<script>alert" not in page.text
     assert "72% confidence" in page.text
-    assert 'content="https://boardroom.app/static/og.png"' in page.text
+    assert f'content="https://boardroom.app/s/{token}/card.png"' in page.text
     assert f'content="https://boardroom.app/s/{token}"' in page.text
     # Unknown tokens fall back to the normal page (the app shows "no longer shared").
     fallback = client.get("/s/unknown-token")
@@ -1371,3 +1371,41 @@ def test_full_meeting_through_the_claude_engine(tmp_path):
         assert ask[-1]["type"] == "done" and "firm return date" in ask[-1]["answer"]
     finally:
         server.shutdown()
+
+
+# ---- verdict share cards ------------------------------------------------------
+
+
+def test_verdict_share_card_images(tmp_path):
+    import io
+
+    from PIL import Image
+
+    client = make_client(tmp_path)
+    signup(client)
+    guest = {"name": "My future self", "perspective": "Ten years on."}
+    meeting_id = events(client.post("/api/meetings", json={"question": "Should I move to Lisbon?", "guest": guest}))[0]["id"]
+
+    own = client.get(f"/api/meetings/{meeting_id}/card.png")
+    assert own.status_code == 200 and own.headers["content-type"] == "image/png"
+    assert "private" in own.headers["cache-control"]
+    img = Image.open(io.BytesIO(own.content))
+    assert img.size == (1200, 630)
+
+    token = client.post(f"/api/meetings/{meeting_id}/share").json()["token"]
+    client.post("/api/logout")
+    assert client.get(f"/api/meetings/{meeting_id}/card.png").status_code == 401
+    public = client.get(f"/s/{token}/card.png")
+    assert public.status_code == 200 and public.content == own.content  # same card, cached render
+    assert "public" in public.headers["cache-control"]
+    assert client.get("/s/not-shared/card.png").status_code == 404
+
+
+def test_card_renderer_handles_long_text():
+    from boardroom.cards import verdict_card
+
+    png = verdict_card("Why? " * 120, {"headline": "Because. " * 60, "confidence": 140, "votes": [
+        {"advisor": a, "position": p} for a, p in
+        [("analyst", "for"), ("skeptic", "against"), ("strategist", "mixed"), ("operator", "for"), ("guest", "for")]
+    ]}, guest_name="A very long guest advisor name indeed")
+    assert png[:8] == b"\x89PNG\r\n\x1a\n"

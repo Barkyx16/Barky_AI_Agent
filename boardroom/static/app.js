@@ -185,6 +185,9 @@ const ICON = {
   alert: svg('<path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/>', 15),
   moon: svg('<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>'),
   sun: svg('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'),
+  image: svg('<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>'),
+  up: svg('<path d="M12 19V5"/><path d="m6 11 6-6 6 6"/>', 15),
+  keyboard: svg('<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/>'),
   doc: svg('<path d="M6 3h9l3 3v15H6z"/><path d="M9 11h6M9 15h6"/>'),
   bolt: svg('<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>'),
   gear: svg('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
@@ -1137,7 +1140,7 @@ function renderLive() {
     view.innerHTML = meetingLayout({
       question: live.question, context: live.context, mode: live.mode, focus: live.focus, created_at: null, running: live.running,
       stage: live.chair !== "waiting" ? "chair" : live.rounds.length > 1 ? "rebuttal" : "opening",
-      shareable: !!live.verdict, share_token: live.share_token,
+      shareable: !!live.verdict, share_token: live.share_token, id: live.id,
     }, live.rounds, (round) => seatsFor(live.guest).map((a) => {
       const r = live.remarks[a.key][round];
       const askable = round === 1 && live.verdict && !live.running && r.text;
@@ -1191,6 +1194,11 @@ function meetingLayout(m, rounds, cardsFor) {
   const focusLabel = (state.config.focus_areas || []).find((f) => f.key === m.focus)?.label;
   const mode = `${m.mode === "deep" ? "Deep debate" : "Quick session"}${focusLabel ? ` · ${focusLabel} board` : ""}`;
   return `
+    <div class="mini-head" aria-hidden="true">
+      <span class="mini-q">${esc(m.question)}</span>
+      <button class="mini-btn" type="button" tabindex="-1" data-mini="verdict">The verdict ${ICON.arrowDown}</button>
+      <button class="mini-btn" type="button" tabindex="-1" data-mini="top">Top ${ICON.up}</button>
+    </div>
     ${m.readonly ? "" : demoBanner()}
     <div class="meeting-head">
       <div>
@@ -1203,6 +1211,7 @@ function meetingLayout(m, rounds, cardsFor) {
         <div class="toolbar" role="toolbar" aria-label="Meeting actions">
           <button class="tool share ${m.share_token ? "is-on" : ""}" data-act="share" data-tip="${m.share_token ? "Shared · manage link" : "Share"}" aria-label="${m.share_token ? "Shared, manage link" : "Share"}" ${m.running || !m.shareable ? "disabled" : ""}>${ICON.share}<span>${m.share_token ? "Shared" : "Share"}</span></button>
           <button class="tool" data-act="copy" data-tip="Copy summary" aria-label="Copy summary" ${m.running ? "disabled" : ""}>${ICON.copy}</button>
+          ${m.id && m.shareable ? `<a class="tool" href="/api/meetings/${Number(m.id)}/card.png" download="boardroom-verdict.png" data-tip="Download verdict image" aria-label="Download verdict image">${ICON.image}</a>` : ""}
           <button class="tool" data-act="print" data-tip="Print or save as PDF" aria-label="Print or save as PDF" ${m.running ? "disabled" : ""}>${ICON.print}</button>
           <button class="tool danger" data-act="delete" data-tip="Delete meeting" aria-label="Delete meeting" ${m.running ? "disabled" : ""}>${ICON.trash}</button>
         </div>`}
@@ -1427,7 +1436,21 @@ function errorBox(msg) {
   return `<div class="alert" role="alert"><span>${esc(msg)}</span><button class="btn btn-sm" data-act="retry">Try again</button></div>`;
 }
 
+/* A slim bar that keeps the question in view once you scroll past the title. */
+function bindMiniHead(root) {
+  const bar = root.querySelector(".mini-head");
+  const title = root.querySelector(".meeting-head h1");
+  if (!bar || !title) return;
+  const io = new IntersectionObserver(([e]) => bar.classList.toggle("show", !e.isIntersecting && e.boundingClientRect.top < 0));
+  io.observe(title);
+  bar.querySelector('[data-mini="top"]').addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+  const toVerdict = bar.querySelector('[data-mini="verdict"]');
+  toVerdict.hidden = !root.querySelector(".verdict, .chair-wait");
+  toVerdict.addEventListener("click", () => root.querySelector(".verdict, .chair-wait")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+}
+
 function bindMeetingActions(view, m) {
+  bindMiniHead(view);
   view.querySelector('[data-act="delete"]')?.addEventListener("click", async () => {
     if (!m.id || !confirm("Delete this meeting? This can't be undone.")) return;
     try {
@@ -1902,6 +1925,43 @@ function showTour() {
   paint();
 }
 
+/* ---------- keyboard shortcuts ------------------------------------------- */
+
+const isTyping = (el) => el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+const MOD = navigator.platform.includes("Mac") ? "⌘" : "Ctrl";
+
+function showShortcuts() {
+  if (document.querySelector(".shortcuts")) return;
+  const rows = [
+    [[MOD, "K"], "Command palette: jump to a meeting or run an action"],
+    [["N"], "New meeting"],
+    [["/"], "Search your meetings"],
+    [[MOD, "↵"], "Convene the board (from the question box)"],
+    [["T"], "Switch light / dark theme"],
+    [["?"], "Show these shortcuts"],
+    [["Esc"], "Close any dialog"],
+  ];
+  const back = document.createElement("div");
+  back.className = "modal-back";
+  back.innerHTML = `<div class="modal shortcuts" role="dialog" aria-modal="true" aria-labelledby="sc-title">
+    <h2 id="sc-title">${ICON.keyboard} Keyboard shortcuts</h2>
+    <dl>${rows.map(([keys, what]) => `<div><dt>${keys.map((k) => `<kbd>${esc(k)}</kbd>`).join("")}</dt><dd>${esc(what)}</dd></div>`).join("")}</dl>
+    <div class="actions"><button class="btn" id="sc-close">Done</button></div></div>`;
+  const close = openModal(back);
+  back.querySelector("#sc-close").addEventListener("click", close);
+  back.querySelector("#sc-close").focus();
+}
+
+document.addEventListener("keydown", (e) => {
+  if (!state.user || e.metaKey || e.ctrlKey || e.altKey || isTyping(document.activeElement) || document.querySelector(".modal-back")) return;
+  if (e.key === "?") { e.preventDefault(); showShortcuts(); }
+  else if (e.key === "n" || e.key === "N") { e.preventDefault(); location.hash = "#/new"; }
+  else if (e.key === "/") {
+    const search = document.getElementById("search");
+    if (search) { e.preventDefault(); if (innerWidth <= 860) document.getElementById("shell")?.classList.add("nav-open"); search.focus(); }
+  } else if (e.key === "t" || e.key === "T") { e.preventDefault(); toggleTheme(); }
+});
+
 /* ---------- verdict pill ---------------------------------------------------- */
 
 /* If the verdict lands below the fold while you're reading, offer a shortcut to it. */
@@ -1930,6 +1990,7 @@ function paletteItems() {
     { group: "Actions", label: "Switch theme", hint: "Light / dark", icon: ICON.moon, run: toggleTheme },
     { group: "Actions", label: "Invite friends", hint: "Get bonus meetings", icon: ICON.share, run: showInvite },
     { group: "Actions", label: "Account settings", hint: "Password, emails, data", icon: ICON.gear, run: showSettings },
+    { group: "Actions", label: "Keyboard shortcuts", hint: "Press ?", icon: ICON.keyboard, run: showShortcuts },
   ];
   if (state.user?.is_admin) items.push({ group: "Actions", label: "Owner dashboard", hint: "Revenue, usage, costs", icon: ICON.bolt, run: () => { location.hash = "#/admin"; } });
   if (state.user && state.user.usage.plan !== "pro" && !state.config.demo) items.push({ group: "Actions", label: "Upgrade to Pro", hint: state.config.pro_price, icon: ICON.bolt, run: showUpgrade });

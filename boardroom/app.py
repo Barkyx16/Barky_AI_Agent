@@ -32,6 +32,7 @@ from .db import Database
 from .engine import Engine, EngineError, make_engine
 from .hub import MeetingHub
 from . import legal
+from .cards import verdict_card
 from .mailer import Mailer
 from .sample import SAMPLE_MEETING
 from .meeting import run_meeting
@@ -762,12 +763,14 @@ def create_app(
 
     page = (STATIC / "index.html").read_text()
 
-    def render_page(request: Request, title: str, description: str, path: str) -> HTMLResponse:
+    def render_page(
+        request: Request, title: str, description: str, path: str, image: str = "/static/og.png"
+    ) -> HTMLResponse:
         base = settings.public_url or str(request.base_url).rstrip("/")
         values = {
             "__TITLE__": title,
             "__DESCRIPTION__": description,
-            "__IMAGE__": f"{base}/static/og.png",
+            "__IMAGE__": f"{base}{image}",
             "__URL__": f"{base}{path}",
         }
         out = page
@@ -820,6 +823,25 @@ def create_app(
             '<p><a class="btn" href="/">Back to Boardroom</a></p>',
         )
 
+    def png(data: bytes, cache: str) -> Response:
+        return Response(data, media_type="image/png", headers={"Cache-Control": cache})
+
+    @app.get("/s/{token}/card.png")
+    def shared_card(token: str):
+        found = db.shared_meeting(token)
+        if found is None or not found["verdict"]:
+            raise HTTPException(status_code=404, detail="Not shared.")
+        guest = (found.get("guest") or {}).get("name", "")
+        return png(verdict_card(found["question"], found["verdict"], guest), "public, max-age=3600")
+
+    @app.get("/api/meetings/{meeting_id}/card.png")
+    def meeting_card(meeting_id: int, user=Depends(current_user)):
+        found = db.get_meeting(user["id"], meeting_id)
+        if found is None or not found["verdict"]:
+            raise HTTPException(status_code=404, detail="No verdict yet.")
+        guest = (found.get("guest") or {}).get("name", "")
+        return png(verdict_card(found["question"], found["verdict"], guest), "private, max-age=300")
+
     @app.get("/terms")
     def terms():
         return HTMLResponse(legal.render(
@@ -843,6 +865,7 @@ def create_app(
             f"“{found['question'][:120]}” — the board's verdict",
             f"{v['headline']} ({v['confidence']}% confidence). Debated by an AI board of advisors on Boardroom.",
             f"/s/{token}",
+            image=f"/s/{token}/card.png",
         )
 
     @app.get("/healthz")

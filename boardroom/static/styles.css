@@ -869,6 +869,39 @@ body {
 .tour-foot .dots i.on { width: 20px; background: var(--accent); }
 @media print { .body.prose.clamped { max-height: none; -webkit-mask-image: none; mask-image: none; } .read-more { display: none; } }
 
+/* ========================================================================
+   Sticky mini header, shortcuts sheet
+   ======================================================================== */
+.mini-head {
+  position: sticky; top: 0; z-index: 15; height: 0; overflow: visible;
+  display: flex; align-items: center; gap: 8px; pointer-events: none;
+}
+.mini-head::before {
+  content: ""; position: absolute; left: -100vw; right: -100vw; top: 0; height: 54px;
+  background: color-mix(in srgb, var(--bg) 78%, transparent); -webkit-backdrop-filter: saturate(1.4) blur(14px); backdrop-filter: saturate(1.4) blur(14px);
+  border-bottom: 1px solid var(--line); opacity: 0; transform: translateY(-8px); transition: opacity .2s, transform .25s var(--ease);
+}
+.mini-head > * { position: relative; top: 27px; transform: translateY(-50%); opacity: 0; transition: opacity .2s; }
+.mini-head.show { pointer-events: auto; }
+.mini-head.show::before, .mini-head.show > * { opacity: 1; }
+.mini-head.show::before { transform: none; }
+.mini-q { flex: 1; min-width: 0; font: 600 18px var(--serif); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mini-btn { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line); background: var(--bg-elev); color: var(--text-2); border-radius: 8px; padding: 5px 10px; font: 600 12.5px var(--sans); cursor: pointer; }
+.mini-btn:hover { color: var(--text); border-color: var(--line-strong); }
+@media (max-width: 860px) { .mini-head { top: 57px; } }
+.main { overflow-x: clip; }
+@media print { .mini-head { display: none !important; } }
+a.tool { text-decoration: none; }
+
+.modal.shortcuts { max-width: 480px; }
+.shortcuts h2 { display: flex; align-items: center; gap: 10px; font-size: 24px; margin-bottom: 16px; }
+.shortcuts dl { margin: 0; display: grid; gap: 2px; }
+.shortcuts dl > div { display: grid; grid-template-columns: 120px 1fr; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.shortcuts dl > div:last-child { border-bottom: 0; }
+.shortcuts dt { display: flex; gap: 4px; }
+.shortcuts dd { margin: 0; color: var(--text-2); font-size: 14px; }
+kbd { display: inline-grid; place-items: center; min-width: 26px; height: 24px; padding: 0 6px; border-radius: 6px; font: 600 12px var(--sans); color: var(--text); background: var(--bg-sunk); border: 1px solid var(--line-strong); box-shadow: inset 0 -2px 0 var(--line); }
+
 /* Responsive ------------------------------------------------------------- */
 @media (max-width: 980px) {
   .landing { grid-template-columns: 1fr; }
