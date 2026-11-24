@@ -43,12 +43,13 @@ Boardroom gives anyone a private board of AI advisors. You bring a decision ("Sh
 - **A complete landing page.** Animated hero, a visual "How it works", a Free vs Pro pricing table generated from your actual limits and price, a final call to action, and a footer.
 - **Advisor identities.** Each advisor has its own glyph (magnifier, shield, compass, checklist, gavel), and live meetings show a progress stepper (Opening remarks → Rebuttals → Verdict).
 - **Delightful details.** A three-step welcome tour for new accounts, a question box that types out example questions, long remarks folded behind "Read more", confetti when a plan is finished, and a sidebar grouped by Today / Yesterday / Previous 7 days.
+- **Make it yours.** Five accent themes (Gold, Sapphire, Emerald, Rose, Violet) in Settings or the ⌘K palette, each contrast-checked in light and dark.
 - **Keyboard first.** `?` shows every shortcut: `N` new meeting, `/` search, `T` theme, plus the ⌘K palette. A slim sticky bar keeps the question in view while you scroll a long meeting.
 - **Command palette.** Press ⌘K / Ctrl+K to jump to any meeting or run an action (new meeting, theme, settings, invite, dashboard), all from the keyboard.
 - **Sleek details.** Smooth page transitions (View Transitions API), an icon toolbar with tooltips, a "verdict is in" pill when the verdict lands below the fold, shimmering skeletons, a question box that grows as you type, and an animated sun/moon theme toggle.
 - **Accessible.** Audited with axe-core (WCAG 2.1 AA plus best practices) on every screen in both themes, with zero violations: compliant text contrast, labelled controls, landmarks, ordered headings, keyboard-trapped dialogs, and reduced-motion support.
 - **Graceful failures.** If one advisor hits an error, they sit the round out and the meeting continues.
-- **Owner dashboard.** Revenue estimate, users, active users, meetings, failure rate, shared verdicts, and the API cost of every meeting (tokens and web searches turned into dollars), with daily charts. Visible only to admin emails.
+- **Owner dashboard.** Revenue estimate (with 14-day sparklines on the key tiles), users, active users, meetings, failure rate, shared verdicts, and the API cost of every meeting (tokens and web searches turned into dollars), with daily charts. Visible only to admin emails.
 - **Duty of care.** Every advisor follows safety rules for crisis situations and high-stakes medical, legal, or financial topics.
 
 ## Run it

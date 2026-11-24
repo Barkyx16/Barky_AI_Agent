@@ -354,6 +354,7 @@ button, input, textarea { font: inherit; color: inherit; }
 .panel li { margin: 4px 0; }
 .first-move { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: var(--accent-soft); }
 .first-move p { margin: 0; font-size: 15px; font-weight: 550; }
+.first-move h3 { color: var(--text-2); }  /* readable on every accent tint */
 
 .plan { margin-top: 18px; }
 .plan-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 10px; }
@@ -901,6 +902,44 @@ a.tool { text-decoration: none; }
 .shortcuts dt { display: flex; gap: 4px; }
 .shortcuts dd { margin: 0; color: var(--text-2); font-size: 14px; }
 kbd { display: inline-grid; place-items: center; min-width: 26px; height: 24px; padding: 0 6px; border-radius: 6px; font: 600 12px var(--sans); color: var(--text); background: var(--bg-sunk); border: 1px solid var(--line-strong); box-shadow: inset 0 -2px 0 var(--line); }
+
+/* ========================================================================
+   Accent themes (contrast-checked: 4.5:1+ for text, buttons and badges)
+   ======================================================================== */
+:root[data-accent="sapphire"] { --accent: #2f5fb8; --accent-ink: #ffffff; --accent-soft: #e6ecf6; }
+@media (prefers-color-scheme: dark) { :root[data-accent="sapphire"]:not([data-theme="light"]) { --accent: #7aa7f0; --accent-ink: #14110a; --accent-soft: #1e293a; } }
+:root[data-accent="sapphire"][data-theme="dark"] { --accent: #7aa7f0; --accent-ink: #14110a; --accent-soft: #1e293a; }
+:root[data-accent="emerald"] { --accent: #1b7353; --accent-ink: #ffffff; --accent-soft: #e4eeea; }
+@media (prefers-color-scheme: dark) { :root[data-accent="emerald"]:not([data-theme="light"]) { --accent: #5fc79e; --accent-ink: #14110a; --accent-soft: #1a2e2d; } }
+:root[data-accent="emerald"][data-theme="dark"] { --accent: #5fc79e; --accent-ink: #14110a; --accent-soft: #1a2e2d; }
+:root[data-accent="rose"] { --accent: #b0385f; --accent-ink: #ffffff; --accent-soft: #f6e7ec; }
+@media (prefers-color-scheme: dark) { :root[data-accent="rose"]:not([data-theme="light"]) { --accent: #ef8fae; --accent-ink: #14110a; --accent-soft: #31252f; } }
+:root[data-accent="rose"][data-theme="dark"] { --accent: #ef8fae; --accent-ink: #14110a; --accent-soft: #31252f; }
+:root[data-accent="violet"] { --accent: #6646b8; --accent-ink: #ffffff; --accent-soft: #ede9f6; }
+@media (prefers-color-scheme: dark) { :root[data-accent="violet"]:not([data-theme="light"]) { --accent: #ad95f2; --accent-ink: #14110a; --accent-soft: #27263a; } }
+:root[data-accent="violet"][data-theme="dark"] { --accent: #ad95f2; --accent-ink: #14110a; --accent-soft: #27263a; }
+.swatches { display: flex; gap: 10px; flex-wrap: wrap; }
+.swatch { position: relative; width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--bg-elev); box-shadow: 0 0 0 1.5px var(--line-strong); cursor: pointer; background: var(--sw); transition: transform .15s var(--ease), box-shadow .15s; }
+.swatch:hover { transform: scale(1.08); }
+.swatch[aria-checked="true"] { box-shadow: 0 0 0 2.5px var(--text); }
+.swatch[aria-checked="true"]::after { content: ""; position: absolute; inset: 0; margin: auto; width: 7px; height: 12px; border: solid #fff; border-width: 0 2.5px 2.5px 0; transform: translate(0, -1px) rotate(45deg); }
+
+.pal-dot { width: 14px; height: 14px; border-radius: 50%; display: block; }
+.pal-gold { background: #b08f52; } .pal-sapphire { background: #2f5fb8; } .pal-emerald { background: #1b7353; } .pal-rose { background: #c2466e; } .pal-violet { background: #6c4cc4; }
+
+/* Top loading bar */
+#loadbar { position: fixed; left: 0; top: 0; height: 2.5px; width: 0; z-index: 80; pointer-events: none; opacity: 0;
+  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 50%, #fff)); box-shadow: 0 0 10px var(--accent);
+  transition: width .4s var(--ease), opacity .3s; }
+#loadbar.on { opacity: 1; }
+
+/* Dashboard sparklines */
+.stat .spark { display: block; width: 100%; height: 28px; margin-top: 8px; overflow: visible; }
+.stat .spark polyline { fill: none; stroke: var(--text-3); stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.spark-wrap { position: relative; margin-top: 8px; }
+.spark-wrap .spark { margin-top: 0; }
+.spark-dot { position: absolute; right: -4px; width: 8px; height: 8px; margin-top: -4px; border-radius: 50%; background: var(--chart); box-shadow: 0 0 0 2px var(--bg-elev); }
+
 
 /* Responsive ------------------------------------------------------------- */
 @media (max-width: 980px) {

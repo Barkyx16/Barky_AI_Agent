@@ -84,6 +84,7 @@ function applyStyles(root = document) {
   root.querySelectorAll("[data-c]").forEach((el) => el.style.setProperty("--c", el.dataset.c));
   root.querySelectorAll("[data-w]").forEach((el) => { el.style.width = `${el.dataset.w}%`; });
   root.querySelectorAll("[data-p]").forEach((el) => el.style.setProperty("--p", el.dataset.p));
+  root.querySelectorAll("[data-top]").forEach((el) => { el.style.top = `${el.dataset.top}%`; });
 }
 
 function toast(msg, kind) {
@@ -120,7 +121,33 @@ function timeAgo(iso) {
   return new Date(iso).toLocaleDateString();
 }
 
+/* A thin progress line at the top while requests take longer than a blink. */
+const loadbar = { n: 0, timer: null };
+function loadStart() {
+  if (loadbar.n++ > 0) return;
+  clearTimeout(loadbar.timer);
+  loadbar.timer = setTimeout(() => {
+    let el = document.getElementById("loadbar");
+    if (!el) { el = document.createElement("div"); el.id = "loadbar"; el.setAttribute("aria-hidden", "true"); document.body.appendChild(el); }
+    el.style.transition = "none"; el.style.width = "0"; void el.offsetWidth; el.style.transition = "";
+    el.classList.add("on"); el.style.width = "72%";
+  }, 160);
+}
+function loadEnd() {
+  if (--loadbar.n > 0) return;
+  clearTimeout(loadbar.timer);
+  const el = document.getElementById("loadbar");
+  if (!el || !el.classList.contains("on")) return;
+  el.style.width = "100%";
+  setTimeout(() => { el.classList.remove("on"); }, 260);
+}
+
 async function api(path, opts = {}) {
+  loadStart();
+  try { return await apiRaw(path, opts); } finally { loadEnd(); }
+}
+
+async function apiRaw(path, opts = {}) {
   const res = await fetch(path, {
     method: opts.method || "GET",
     headers: opts.body ? { "Content-Type": "application/json" } : {},
@@ -152,12 +179,25 @@ function friendlyValidation(items) {
 
 /* ---------- theme -------------------------------------------------------- */
 
+const ACCENTS = [["gold", "Gold", "#b08f52"], ["sapphire", "Sapphire", "#2f5fb8"], ["emerald", "Emerald", "#1b7353"], ["rose", "Rose", "#c2466e"], ["violet", "Violet", "#6c4cc4"]];
+
 function initTheme() {
   try {
     const saved = localStorage.getItem("theme");
     if (saved) document.documentElement.dataset.theme = saved;
+    const accent = localStorage.getItem("accent");
+    if (accent && accent !== "gold") document.documentElement.dataset.accent = accent;
   } catch (_) { /* storage unavailable */ }
 }
+
+function setAccent(key) {
+  if (key === "gold") delete document.documentElement.dataset.accent;
+  else document.documentElement.dataset.accent = key;
+  try { localStorage.setItem("accent", key); } catch (_) { /* fine */ }
+  document.querySelectorAll("[data-swatch]").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.swatch === key)));
+}
+
+const currentAccent = () => document.documentElement.dataset.accent || "gold";
 
 function toggleTheme() {
   const isDark = document.documentElement.dataset.theme
@@ -711,6 +751,12 @@ function showSettings() {
         <label class="toggle"><input type="checkbox" id="digest" ${state.user.digest_emails ? "checked" : ""}> Weekly digest of my open plan steps</label>
       </div>` : ""}
       <div class="settings-block">
+        <h3 id="accent-label">Accent color</h3>
+        <div class="swatches" role="radiogroup" aria-labelledby="accent-label">
+          ${ACCENTS.map(([k, label, c]) => `<button type="button" class="swatch" role="radio" data-swatch="${k}" data-c="${c}" aria-checked="${currentAccent() === k}" aria-label="${label}" title="${label}"></button>`).join("")}
+        </div>
+      </div>
+      <div class="settings-block">
         <h3>Your data</h3>
         <p class="fine left">Download every meeting, verdict and plan as a JSON file.</p>
         <a class="btn" href="/api/account/export" download>Download my data</a>
@@ -738,6 +784,10 @@ function showSettings() {
       } catch (err) { e.target.checked = !on; toast(err.message); }
     });
   }
+  back.querySelectorAll("[data-swatch]").forEach((b) => {
+    b.style.setProperty("--sw", b.dataset.c);
+    b.addEventListener("click", () => setAccent(b.dataset.swatch));
+  });
   back.querySelector("#pw-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const err = back.querySelector("#pw-error");
@@ -1723,8 +1773,18 @@ function bindChart(el, rows, key, fmt, label) {
   });
 }
 
-function statTile(label, value, sub = "", hero = false) {
-  return `<div class="stat ${hero ? "hero" : ""}"><div class="label">${esc(label)}</div><div class="value">${esc(value)}</div>${sub ? `<div class="sub">${esc(sub)}</div>` : ""}</div>`;
+function sparkline(values, label) {
+  if (!values || values.length < 2) return "";
+  const max = Math.max(...values, 1), W = 100, H = 28, pad = 3;
+  const pts = values.map((v, i) => [(i / (values.length - 1)) * W, H - pad - (v / max) * (H - pad * 2)]);
+  const [lx, ly] = pts[pts.length - 1];
+  // The line stretches to the tile; the end dot is a separate element so it stays round.
+  return `<div class="spark-wrap" role="img" aria-label="${esc(label)}"><svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+    <polyline points="${pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ")}"/></svg><span class="spark-dot" data-top="${((ly / H) * 100).toFixed(1)}"></span></div>`;
+}
+
+function statTile(label, value, sub = "", hero = false, spark = "") {
+  return `<div class="stat ${hero ? "hero" : ""}"><div class="label">${esc(label)}</div><div class="value">${esc(value)}</div>${sub ? `<div class="sub">${esc(sub)}</div>` : ""}${spark}</div>`;
 }
 
 async function renderAdmin() {
@@ -1745,10 +1805,10 @@ async function renderAdmin() {
       <p>How Boardroom is doing. Costs are estimates from API token usage${st.engine === "demo" ? " (demo mode makes no API calls, so costs read $0)" : ""}.</p></div>
     <div class="kpis">
       ${statTile("Estimated monthly revenue", fmtUsd(st.revenue.mrr_estimate_usd, 0), `${fmtInt(st.users.pro)} Pro × ${fmtUsd(st.revenue.pro_price_usd, 0)}`, true)}
-      ${statTile("Users", fmtInt(st.users.total), `${fmtInt(st.users.new_7d)} new · ${fmtInt(st.users.active_7d)} active this week`)}
-      ${statTile("Meetings", fmtInt(st.meetings.last_7d), `last 7 days · ${fmtInt(st.meetings.today)} today`)}
+      ${statTile("Users", fmtInt(st.users.total), `${fmtInt(st.users.new_7d)} new · ${fmtInt(st.users.active_7d)} active this week`, false, sparkline(st.daily.map((d) => d.signups), "Sign-ups per day, last 14 days"))}
+      ${statTile("Meetings", fmtInt(st.meetings.last_7d), `last 7 days · ${fmtInt(st.meetings.today)} today`, false, sparkline(st.daily.map((d) => d.meetings), "Meetings per day, last 14 days"))}
       ${statTile("Failure rate", fmtPct(st.meetings.failure_rate_7d), "last 7 days")}
-      ${statTile("API cost", fmtUsd(st.cost.last_30d_usd), "last 30 days")}
+      ${statTile("API cost", fmtUsd(st.cost.last_30d_usd), "last 30 days", false, sparkline(st.daily.map((d) => d.cost_usd), "API cost per day, last 14 days"))}
       ${statTile("Cost per meeting", fmtUsd(st.cost.avg_per_meeting_usd, 3), "average, finished meetings")}
       ${statTile("Revenue minus API cost", fmtUsd(margin, 0), "monthly estimate vs last 30 days")}
       ${statTile("Shared verdicts", fmtInt(st.meetings.shared), "public links, all time")}
@@ -1991,6 +2051,7 @@ function paletteItems() {
     { group: "Actions", label: "Invite friends", hint: "Get bonus meetings", icon: ICON.share, run: showInvite },
     { group: "Actions", label: "Account settings", hint: "Password, emails, data", icon: ICON.gear, run: showSettings },
     { group: "Actions", label: "Keyboard shortcuts", hint: "Press ?", icon: ICON.keyboard, run: showShortcuts },
+    ...ACCENTS.map(([k, label]) => ({ group: "Appearance", label: `Accent color: ${label}`, hint: currentAccent() === k ? "Current" : "", icon: `<span class="pal-dot pal-${k}"></span>`, run: () => setAccent(k) })),
   ];
   if (state.user?.is_admin) items.push({ group: "Actions", label: "Owner dashboard", hint: "Revenue, usage, costs", icon: ICON.bolt, run: () => { location.hash = "#/admin"; } });
   if (state.user && state.user.usage.plan !== "pro" && !state.config.demo) items.push({ group: "Actions", label: "Upgrade to Pro", hint: state.config.pro_price, icon: ICON.bolt, run: showUpgrade });
