@@ -941,6 +941,55 @@ kbd { display: inline-grid; place-items: center; min-width: 26px; height: 24px; 
 .spark-dot { position: absolute; right: -4px; width: 8px; height: 8px; margin-top: -4px; border-radius: 50%; background: var(--chart); box-shadow: 0 0 0 2px var(--bg-elev); }
 
 
+/* ========================================================================
+   Pass 7: pins, tally, hero accent, empty states, boot
+   ======================================================================== */
+.pin-mark { display: inline-flex; vertical-align: -2px; margin-right: 5px; color: var(--accent); }
+.pin-mark svg { width: 13px; height: 13px; fill: currentColor; }
+.tool.pin.is-on { color: var(--accent); }
+.tool.pin.is-on svg { fill: currentColor; }
+
+/* Vote tally */
+.tally { margin: 4px 0 2px; }
+.tally-bar { display: flex; gap: 2px; height: 8px; max-width: 360px; }
+.tally-bar i { flex-basis: 0; border-radius: 2px; }
+.tally-bar i:first-child { border-radius: 4px 2px 2px 4px; }
+.tally-bar i:last-child { border-radius: 2px 4px 4px 2px; }
+.tally-bar i:only-child { border-radius: 4px; }
+.tally .t-for { background: var(--ok); } .tally .t-mixed { background: var(--warn); } .tally .t-against { background: var(--bad); }
+.tally-legend { display: flex; gap: 14px; margin-top: 7px; font-size: 12.5px; color: var(--text-2); }
+.tally-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.tally-legend b { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+
+/* Hero accent: a slow shimmer across "board meeting." */
+.landing-hero h1 .hl {
+  background: linear-gradient(100deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 65%, var(--text)) 45%, var(--accent) 90%);
+  background-size: 220% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: hl-shift 9s ease-in-out infinite;
+}
+@keyframes hl-shift { 50% { background-position: 100% 0; } }
+
+/* Arrows that lean forward on hover */
+.arr { display: inline-block; transition: transform .2s var(--ease); }
+a:hover > .arr, button:hover > .arr { transform: translateX(3px); }
+
+/* Empty / not-found state */
+.empty-state { text-align: center; padding: 72px 16px 40px; max-width: 520px; margin: 0 auto; }
+.empty-art { width: 220px; height: 120px; margin-bottom: 22px; }
+.empty-art .e-table { fill: var(--bg-elev); stroke: color-mix(in srgb, var(--accent) 50%, var(--line)); stroke-width: 2; }
+.empty-art .e-seat { fill: var(--bg-sunk); stroke: var(--line-strong); stroke-width: 1.5; stroke-dasharray: 3 3; }
+.empty-state h1 { font-size: 32px; margin-bottom: 10px; }
+.empty-state p { color: var(--text-2); margin-bottom: 24px; }
+
+/* Branded boot screen */
+.boot-brand { display: grid; place-items: center; align-content: center; gap: 18px; min-height: 100vh; }
+.boot-brand img { border-radius: 14px; animation: boot-breathe 1.6s ease-in-out infinite; }
+.boot-dots { display: flex; gap: 6px; }
+.boot-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); animation: pulse 1.2s ease-in-out infinite; }
+.boot-dots i:nth-child(2) { animation-delay: .15s; } .boot-dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes boot-breathe { 50% { transform: scale(1.05); filter: drop-shadow(0 8px 22px rgba(201, 169, 110, .35)); } }
+@media (prefers-reduced-motion: reduce) { .landing-hero h1 .hl { animation: none; } }
+
 /* Responsive ------------------------------------------------------------- */
 @media (max-width: 980px) {
   .landing { grid-template-columns: 1fr; }

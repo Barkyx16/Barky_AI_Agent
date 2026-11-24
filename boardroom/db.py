@@ -127,6 +127,8 @@ class Database:
                 c.execute("ALTER TABLE meetings ADD COLUMN share_token TEXT")
             if "guest" not in cols:
                 c.execute("ALTER TABLE meetings ADD COLUMN guest TEXT")
+            if "pinned" not in cols:
+                c.execute("ALTER TABLE meetings ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0")
             if "focus" not in cols:
                 c.execute("ALTER TABLE meetings ADD COLUMN focus TEXT NOT NULL DEFAULT ''")
             if "review_at" not in cols:
@@ -435,6 +437,12 @@ class Database:
                     (meeting_id, i, step["title"], step.get("detail", ""), step.get("when", "")),
                 )
 
+    def set_pinned(self, user_id: int, meeting_id: int, pinned: bool) -> bool:
+        with self.conn() as c:
+            return c.execute(
+                "UPDATE meetings SET pinned = ? WHERE id = ? AND user_id = ?", (int(pinned), meeting_id, user_id)
+            ).rowcount > 0
+
     def set_outcome(self, user_id: int, meeting_id: int, outcome: str | None, note: str) -> bool:
         with self.conn() as c:
             return c.execute(
@@ -556,7 +564,7 @@ class Database:
     def list_meetings(self, user_id: int, limit: int = 100) -> list[dict[str, Any]]:
         with self.conn() as c:
             rows = c.execute(
-                "SELECT c.id, c.question, c.status, c.created_at, c.verdict, c.parent_id, c.review_at, c.outcome, "
+                "SELECT c.id, c.question, c.status, c.created_at, c.verdict, c.parent_id, c.review_at, c.outcome, c.pinned, "
                 "(SELECT COUNT(*) FROM steps s WHERE s.meeting_id = c.id) AS total_steps, "
                 "(SELECT COUNT(*) FROM steps s WHERE s.meeting_id = c.id AND s.done) AS done_steps "
                 "FROM meetings c WHERE c.user_id = ? ORDER BY c.id DESC LIMIT ?",
@@ -575,6 +583,7 @@ class Database:
                     "headline": verdict.get("headline") if verdict else None,
                     "review_at": r["review_at"],
                     "outcome": r["outcome"],
+                    "pinned": bool(r["pinned"]),
                     "total_steps": r["total_steps"],
                     "done_steps": r["done_steps"],
                 }
@@ -614,6 +623,7 @@ class Database:
             "share_token": row["share_token"],
             "review_at": row["review_at"],
             "outcome": row["outcome"],
+            "pinned": bool(row["pinned"]),
             "outcome_note": row["outcome_note"] or "",
             "guest": json.loads(row["guest"]) if row["guest"] else None,
             "verdict": json.loads(row["verdict"]) if row["verdict"] else None,

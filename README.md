@@ -43,6 +43,7 @@ Boardroom gives anyone a private board of AI advisors. You bring a decision ("Sh
 - **A complete landing page.** Animated hero, a visual "How it works", a Free vs Pro pricing table generated from your actual limits and price, a final call to action, and a footer.
 - **Advisor identities.** Each advisor has its own glyph (magnifier, shield, compass, checklist, gavel), and live meetings show a progress stepper (Opening remarks → Rebuttals → Verdict).
 - **Delightful details.** A three-step welcome tour for new accounts, a question box that types out example questions, long remarks folded behind "Read more", confetti when a plan is finished, and a sidebar grouped by Today / Yesterday / Previous 7 days.
+- **Pinned meetings.** Star the decisions you're actively working on and they stay in a Pinned group at the top of the sidebar.
 - **Make it yours.** Five accent themes (Gold, Sapphire, Emerald, Rose, Violet) in Settings or the ⌘K palette, each contrast-checked in light and dark.
 - **Keyboard first.** `?` shows every shortcut: `N` new meeting, `/` search, `T` theme, plus the ⌘K palette. A slim sticky bar keeps the question in view while you scroll a long meeting.
 - **Command palette.** Press ⌘K / Ctrl+K to jump to any meeting or run an action (new meeting, theme, settings, invite, dashboard), all from the keyboard.

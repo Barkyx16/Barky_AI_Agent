@@ -84,6 +84,7 @@ function applyStyles(root = document) {
   root.querySelectorAll("[data-c]").forEach((el) => el.style.setProperty("--c", el.dataset.c));
   root.querySelectorAll("[data-w]").forEach((el) => { el.style.width = `${el.dataset.w}%`; });
   root.querySelectorAll("[data-p]").forEach((el) => el.style.setProperty("--p", el.dataset.p));
+  root.querySelectorAll("[data-flex]").forEach((el) => { el.style.flexGrow = el.dataset.flex; });
   root.querySelectorAll("[data-top]").forEach((el) => { el.style.top = `${el.dataset.top}%`; });
 }
 
@@ -228,6 +229,7 @@ const ICON = {
   image: svg('<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>'),
   up: svg('<path d="M12 19V5"/><path d="m6 11 6-6 6 6"/>', 15),
   keyboard: svg('<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/>'),
+  star: svg('<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>'),
   doc: svg('<path d="M6 3h9l3 3v15H6z"/><path d="M9 11h6M9 15h6"/>'),
   bolt: svg('<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>'),
   gear: svg('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
@@ -430,11 +432,11 @@ function renderLanding(tab = "signup") {
     <div class="landing">
       <section class="landing-hero">
         <div class="brand"><img src="/static/favicon.svg" alt=""> Boardroom</div>
-        <h1>Every hard decision deserves a board meeting.</h1>
+        <h1>Every hard decision deserves a <span class="hl">board meeting.</span></h1>
         <p class="lede">Bring any decision to a private board of AI advisors. They research the facts, argue it out in front of you, and the Chair hands you a verdict and a plan you can start today.</p>
         ${scene}
         <div class="how"><span><b>1</b>Ask your question</span><span><b>2</b>Watch the board debate</span><span><b>3</b>Get a verdict and a plan</span></div>
-        <p class="sample-link"><button class="btn btn-primary mobile-cta" type="button" id="jump-signup">Create a free account</button><a class="btn" href="/#/sample">See a sample meeting →</a></p>
+        <p class="sample-link"><button class="btn btn-primary mobile-cta" type="button" id="jump-signup">Create a free account</button><a class="btn" href="/#/sample">See a sample meeting <span class="arr" aria-hidden="true">→</span></a></p>
         <p class="legal-links"><a href="/terms">Terms</a> · <a href="/privacy">Privacy</a></p>
       </section>
       <section class="landing-auth">
@@ -616,7 +618,7 @@ function renderHistory() {
       ? `<span class="mini-bar"><i data-w="${pct}"></i></span><span>${m.done_steps}/${m.total_steps}</span>${m.outcome ? `<span class="out out-${esc(m.outcome)}">${esc((OUTCOMES.find(([k]) => k === m.outcome) || ["", ""])[1])}</span>` : isDue(m.review_at) ? '<span class="due">Review due</span>' : ""}`
       : `<span>${m.status === "running" ? "In session" : "Unfinished"}</span>`;
     return `<a href="#/m/${m.id}" ${state.meetingId === m.id ? 'aria-current="page"' : ""} ${m.headline ? `title="${esc(m.headline)}"` : ""}>
-      <div class="q">${esc(m.question)}</div>
+      <div class="q">${m.pinned ? `<span class="pin-mark" aria-label="Pinned">${ICON.star}</span>` : ""}${esc(m.question)}</div>
       <div class="meta"><span>${timeAgo(m.created_at)}</span>${meta}</div></a>`;
   };
   if (q) {
@@ -630,7 +632,10 @@ function renderHistory() {
       return diff <= 0 ? "Today" : diff === 1 ? "Yesterday" : diff < 7 ? "Previous 7 days" : diff < 30 ? "Previous 30 days" : "Earlier";
     };
     let html = "", current = "";
-    for (const m of [...shown].sort((x, y) => (x.created_at < y.created_at ? 1 : -1))) {
+    const sorted = [...shown].sort((x, y) => (x.created_at < y.created_at ? 1 : -1));
+    const pinned = sorted.filter((m) => m.pinned);
+    if (pinned.length) html += `<h2>Pinned</h2>${pinned.map(item).join("")}`;
+    for (const m of sorted.filter((x) => !x.pinned)) {
       const b = bucket(m.created_at);
       if (b !== current) { html += `<h2>${b}</h2>`; current = b; }
       html += item(m);
@@ -1261,6 +1266,7 @@ function meetingLayout(m, rounds, cardsFor) {
         <div class="toolbar" role="toolbar" aria-label="Meeting actions">
           <button class="tool share ${m.share_token ? "is-on" : ""}" data-act="share" data-tip="${m.share_token ? "Shared · manage link" : "Share"}" aria-label="${m.share_token ? "Shared, manage link" : "Share"}" ${m.running || !m.shareable ? "disabled" : ""}>${ICON.share}<span>${m.share_token ? "Shared" : "Share"}</span></button>
           <button class="tool" data-act="copy" data-tip="Copy summary" aria-label="Copy summary" ${m.running ? "disabled" : ""}>${ICON.copy}</button>
+          ${m.id && !m.running ? `<button class="tool pin ${m.pinned ? "is-on" : ""}" data-act="pin" data-tip="${m.pinned ? "Unpin" : "Pin to the top"}" aria-pressed="${!!m.pinned}" aria-label="Pin meeting">${ICON.star}</button>` : ""}
           ${m.id && m.shareable ? `<a class="tool" href="/api/meetings/${Number(m.id)}/card.png" download="boardroom-verdict.png" data-tip="Download verdict image" aria-label="Download verdict image">${ICON.image}</a>` : ""}
           <button class="tool" data-act="print" data-tip="Print or save as PDF" aria-label="Print or save as PDF" ${m.running ? "disabled" : ""}>${ICON.print}</button>
           <button class="tool danger" data-act="delete" data-tip="Delete meeting" aria-label="Delete meeting" ${m.running ? "disabled" : ""}>${ICON.trash}</button>
@@ -1396,6 +1402,31 @@ function chairSection(m) {
   return "";
 }
 
+/* A friendly dead end: an empty table and one clear way forward. */
+function emptyState(title, text, cta, href) {
+  return `<section class="empty-state" role="status">
+    <svg class="empty-art" viewBox="0 0 220 120" aria-hidden="true">
+      <ellipse cx="110" cy="66" rx="70" ry="30" class="e-table"/>
+      ${[[110, 18], [26, 66], [194, 66], [60, 108], [160, 108]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="9" class="e-seat"/>`).join("")}
+    </svg>
+    <h1>${esc(title)}</h1>
+    <p>${esc(text)}</p>
+    <a class="btn btn-primary" href="${esc(href)}">${esc(cta)} <span class="arr" aria-hidden="true">→</span></a>
+  </section>`;
+}
+
+/* How the board split, as one segmented bar. */
+function tallyBar(votes) {
+  if (!Array.isArray(votes) || votes.length < 2) return "";
+  const order = [["for", "for"], ["mixed", "mixed"], ["against", "against"]];
+  const counts = order.map(([k]) => votes.filter((v) => v.position === k).length);
+  const parts = order.map(([k, label], i) => ({ k, label, n: counts[i] })).filter((p) => p.n);
+  return `<div class="tally" role="img" aria-label="${parts.map((p) => `${p.n} ${p.label}`).join(", ")}">
+    <div class="tally-bar">${parts.map((p) => `<i class="t-${p.k}" data-flex="${p.n}"></i>`).join("")}</div>
+    <div class="tally-legend" aria-hidden="true">${parts.map((p) => `<span><b class="t-${p.k}"></b>${p.n} ${p.label}</span>`).join("")}</div>
+  </div>`;
+}
+
 function optionsChart(options) {
   if (!Array.isArray(options) || options.length < 2) return "";
   const rows = options.slice().sort((a, b) => b.score - a.score);
@@ -1449,6 +1480,7 @@ function verdictCard(v, steps, readonly = false, guest = null, reviewAt = null, 
       const a = by[x.advisor];
       return a ? `<span class="vote" title="${esc(x.reason)}"><span class="avatar sm" data-c="${esc(a.color)}" title="${esc(a.name)}">${avatarInner(a)}</span><span class="sr-only">${esc(a.name)}:</span><span class="pos ${esc(x.position)}">${esc(x.position)}</span><span class="reason">${esc(x.reason)}</span></span>` : "";
     }).join("")}</div>
+    ${tallyBar(v.votes)}
     ${optionsChart(v.options)}
     <div class="verdict-cols">
       <div class="panel first-move"><h3>Your first move · next 24 hours</h3><p>${esc(v.first_move)}</p></div>
@@ -1508,6 +1540,19 @@ function bindMeetingActions(view, m) {
       if (state.live?.id === m.id) state.live = null;
       toast("Meeting deleted");
       location.hash = "#/new";
+      refreshSidebar();
+    } catch (err) { toast(err.message); }
+  });
+  view.querySelector('[data-act="pin"]')?.addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    const on = btn.getAttribute("aria-pressed") !== "true";
+    try {
+      await api(`/api/meetings/${m.id}/pin`, { method: "PATCH", body: { pinned: on } });
+      m.pinned = on;
+      btn.classList.toggle("is-on", on);
+      btn.setAttribute("aria-pressed", String(on));
+      btn.dataset.tip = on ? "Unpin" : "Pin to the top";
+      toast(on ? "Pinned to the top of your meetings" : "Unpinned");
       refreshSidebar();
     } catch (err) { toast(err.message); }
   });
@@ -1584,10 +1629,11 @@ function bindMeetingActions(view, m) {
       label.classList.toggle("done", box.checked);
       const step = m.steps.find((s) => s.id === id);
       if (step) step.done = box.checked;
+      if (box.checked) navigator.vibrate?.(12);
       updatePlanProgress(view, m.steps);
       try {
         await api(`/api/steps/${id}`, { method: "PATCH", body: { done: box.checked } });
-        if (m.steps.length && m.steps.every((s) => s.done)) { toast("Plan complete. Well done."); confetti(); }
+        if (m.steps.length && m.steps.every((s) => s.done)) { toast("Plan complete. Well done."); confetti(); navigator.vibrate?.([20, 40, 30]); }
         refreshSidebar();
       } catch (err) {
         box.checked = !box.checked;
@@ -1623,8 +1669,10 @@ async function loadMeeting(id) {
   try {
     m = await api(`/api/meetings/${id}`);
   } catch (err) {
-    view.innerHTML = `${errorBox(err.status === 404 ? "That meeting doesn't exist." : err.message)}`;
-    view.querySelector('[data-act="retry"]').addEventListener("click", () => { location.hash = "#/new"; });
+    view.innerHTML = err.status === 404
+      ? emptyState("This meeting isn't here", "It may have been deleted, or the link is wrong.", "Start a new meeting", "#/new")
+      : errorBox(err.message);
+    view.querySelector('[data-act="retry"]')?.addEventListener("click", () => { location.hash = "#/new"; });
     return;
   }
   if (state.meetingId !== id) return;
@@ -1838,7 +1886,7 @@ async function renderShared(token, sample = false) {
     m = await api(sample ? "/api/sample" : `/api/shared/${encodeURIComponent(token)}`);
   } catch (err) {
     $app.innerHTML = `<div class="public"><header class="public-bar"><a class="brand" href="/"><img src="/static/favicon.svg" alt=""> Boardroom</a></header>
-      <main class="container narrow"><div class="alert" role="alert"><span>${esc(err.message)}</span><a class="btn btn-sm" href="/">Go to Boardroom</a></div></main></div>`;
+      <main class="main"><div class="container">${emptyState("This verdict isn't shared anymore", err.message, "Convene your own board", "/")}</div></main></div>`;
     return;
   }
   document.title = `${m.verdict?.headline || m.question} · Boardroom`;

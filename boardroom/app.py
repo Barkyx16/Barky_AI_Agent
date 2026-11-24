@@ -112,6 +112,10 @@ class AskIn(BaseModel):
         return v
 
 
+class PinIn(BaseModel):
+    pinned: bool
+
+
 class OutcomeIn(BaseModel):
     outcome: Literal["great", "mixed", "bad"] | None
     note: str = Field(default="", max_length=1000)
@@ -601,6 +605,12 @@ def create_app(
             )
             if obj.get("customer"):
                 db.set_plan_by_customer(obj["customer"], "pro" if active else "free")
+        return {"ok": True}
+
+    @app.patch("/api/meetings/{meeting_id}/pin")
+    def pin_meeting(meeting_id: int, body: PinIn, user=Depends(current_user)):
+        if not db.set_pinned(user["id"], meeting_id, body.pinned):
+            raise HTTPException(status_code=404, detail="Meeting not found.")
         return {"ok": True}
 
     @app.patch("/api/meetings/{meeting_id}/outcome")

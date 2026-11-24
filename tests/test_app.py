@@ -1409,3 +1409,18 @@ def test_card_renderer_handles_long_text():
         [("analyst", "for"), ("skeptic", "against"), ("strategist", "mixed"), ("operator", "for"), ("guest", "for")]
     ]}, guest_name="A very long guest advisor name indeed")
     assert png[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_pin_meetings(tmp_path):
+    client = make_client(tmp_path)
+    signup(client)
+    meeting_id = events(client.post("/api/meetings", json={"question": "Pin me"}))[0]["id"]
+    assert client.get("/api/meetings").json()[0]["pinned"] is False
+    assert client.patch(f"/api/meetings/{meeting_id}/pin", json={"pinned": True}).status_code == 200
+    assert client.get("/api/meetings").json()[0]["pinned"] is True
+    assert client.get(f"/api/meetings/{meeting_id}").json()["pinned"] is True
+    token = client.post(f"/api/meetings/{meeting_id}/share").json()["token"]
+    assert "pinned" not in client.get(f"/api/shared/{token}").json()
+    client.post("/api/logout")
+    signup(client, email="eve@example.com")
+    assert client.patch(f"/api/meetings/{meeting_id}/pin", json={"pinned": False}).status_code == 404
