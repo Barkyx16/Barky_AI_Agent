@@ -519,8 +519,24 @@ class Database:
         if row is None:
             return
         c.execute("DELETE FROM quota_log WHERE id = ?", (row["id"],))
+        c.execute("DELETE FROM quota_log WHERE kind = 'deep' AND meeting_id = ?", (meeting_id,))
         if row["bonus"]:
             c.execute("UPDATE users SET bonus_meetings = bonus_meetings + 1 WHERE id = ?", (row["user_id"],))
+
+    def free_deep_used(self, user_id: int, days: int = 7) -> int:
+        since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
+        with self.conn() as c:
+            return int(c.execute(
+                "SELECT COUNT(*) FROM quota_log WHERE user_id = ? AND kind = 'deep' AND created_at >= ?",
+                (user_id, since),
+            ).fetchone()[0])
+
+    def log_free_deep(self, user_id: int, meeting_id: int) -> None:
+        with self.conn() as c:
+            c.execute(
+                "INSERT INTO quota_log (user_id, kind, meeting_id, created_at) VALUES (?, 'deep', ?, ?)",
+                (user_id, meeting_id, now_iso()),
+            )
 
     def secret_key(self) -> str:
         """A random server secret, created once and kept in the database."""

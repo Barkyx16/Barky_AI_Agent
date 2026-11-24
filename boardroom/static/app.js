@@ -643,7 +643,9 @@ function demoBanner() {
 
 function renderComposer(prefill) {
   const view = document.getElementById("view");
-  const deepOk = state.user.usage.deep_mode;
+  const freeDeepLeft = state.user.usage.free_deep_left || 0;
+  const deepOk = state.user.usage.deep_mode || freeDeepLeft > 0;
+  if (state.mode === "deep" && !deepOk) state.mode = "quick";
   if (prefill) state.draft = { ...state.draft, ...prefill };
   delete view.dataset.layout;
   view.innerHTML = `
@@ -680,7 +682,7 @@ function renderComposer(prefill) {
         <div>
           <div class="segmented" role="group" aria-label="Meeting type">
             <button type="button" data-mode="quick" aria-pressed="${state.mode === "quick"}">Quick session</button>
-            <button type="button" data-mode="deep" aria-pressed="${state.mode === "deep"}">Deep debate ${deepOk ? "" : '<span class="pro">PRO</span>'}</button>
+            <button type="button" data-mode="deep" aria-pressed="${state.mode === "deep"}">Deep debate ${state.user.usage.deep_mode ? "" : freeDeepLeft > 0 ? `<span class="pro free">${freeDeepLeft} FREE</span>` : '<span class="pro">PRO</span>'}</button>
           </div>
           <div class="mode-hint" id="mode-hint"></div>
         </div>
@@ -700,7 +702,7 @@ function renderComposer(prefill) {
   const hint = document.getElementById("mode-hint");
   const setHint = () => {
     hint.textContent = state.mode === "deep"
-      ? "Opening remarks, then a rebuttal round, then the verdict. About 2 minutes."
+      ? `Opening remarks, then a rebuttal round, then the verdict. About 2 minutes.${!state.user.usage.deep_mode ? " Uses your free deep debate for this week." : ""}`
       : "Opening remarks from all four advisors, then the verdict. About a minute.";
   };
   setHint();

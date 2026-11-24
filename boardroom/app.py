@@ -303,11 +303,15 @@ def create_app(
 
     def usage(user: sqlite3.Row) -> dict:
         unlimited = demo or user["plan"] == "pro"
+        free_deep_left = (
+            None if unlimited else max(0, settings.free_deep_per_week - db.free_deep_used(user["id"]))
+        )
         return {
             "plan": user["plan"],
             "used_today": db.meetings_today(user["id"]),
             "daily_limit": None if unlimited else settings.free_daily_limit,
             "deep_mode": unlimited,
+            "free_deep_left": free_deep_left,
             "bonus_meetings": user["bonus_meetings"],
         }
 
@@ -624,8 +628,12 @@ def create_app(
                 status_code=429,
                 detail="You already have meetings in session. Wait for one to finish before starting another.",
             )
-        if body.mode == "deep" and not quota["deep_mode"]:
-            raise HTTPException(status_code=403, detail="Deep debates are a Pro feature.")
+        free_deep = body.mode == "deep" and not quota["deep_mode"]
+        if free_deep and not quota["free_deep_left"]:
+            raise HTTPException(
+                status_code=403,
+                detail="You've used this week's free Deep debate. Upgrade to Pro for unlimited deep debates.",
+            )
 
         question = body.question.strip()
         context = body.context.strip()
@@ -657,6 +665,8 @@ def create_app(
         meeting_id = db.create_meeting(
             user["id"], question, context, body.mode, body.parent_id, guest, focus, needs_bonus
         )
+        if free_deep:
+            db.log_free_deep(user["id"], meeting_id)
         guest_advisor = make_guest(guest["name"], guest["perspective"]) if guest else None
 
         async def events():

@@ -56,6 +56,7 @@ class Settings:
     legal_updated: str = "October 9, 2026"
     referral_bonus: int = 3
     referral_cap: int = 30
+    free_deep_per_week: int = 1
     free_daily_asks: int = 10
     pro_daily_asks: int = 200
     max_concurrent_meetings: int = 2
@@ -100,6 +101,7 @@ class Settings:
             legal_updated=os.environ.get("BOARDROOM_LEGAL_UPDATED", "October 9, 2026"),
             referral_bonus=int(os.environ.get("BOARDROOM_REFERRAL_BONUS", "3")),
             referral_cap=int(os.environ.get("BOARDROOM_REFERRAL_CAP", "30")),
+            free_deep_per_week=int(os.environ.get("BOARDROOM_FREE_DEEP_PER_WEEK", "1")),
             free_daily_asks=int(os.environ.get("BOARDROOM_FREE_DAILY_ASKS", "10")),
             pro_daily_asks=int(os.environ.get("BOARDROOM_PRO_DAILY_ASKS", "200")),
             max_concurrent_meetings=int(os.environ.get("BOARDROOM_MAX_CONCURRENT", "2")),

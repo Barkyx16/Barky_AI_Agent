@@ -19,7 +19,7 @@ Boardroom gives anyone a private board of AI advisors. You bring a decision ("Sh
 - **Board focus.** Pick a Money, Career, Business, Relationships or Health & life board, and every advisor and the Chair get domain-specific guidance (cash flow and taxes for Money; extra care to involve professionals for Health). Follow-ups keep the focus.
 - **Guest advisors.** Seat anyone at the table with a name and perspective, or pick a preset. They debate alongside the board and get a vote, and follow-ups keep the same guest.
 - **Ask an advisor.** After the verdict, ask any advisor a direct follow-up ("Skeptic, what's the worst case?") and get a streamed answer in their voice. It costs one API call instead of a full meeting. Free: 10 a day; Pro: 200.
-- **Deep debate mode (Pro).** Adds a rebuttal round where advisors challenge each other before the Chair rules.
+- **Deep debate mode (Pro).** Adds a rebuttal round where advisors challenge each other before the Chair rules. Free users get one deep debate a week as a taste of Pro.
 - **Verdict card.** Headline, confidence ring, each advisor's vote, risks, first move, and an action plan.
 - **Never lose a meeting.** Meetings run on the server independently of the browser. Refresh, lose your connection or open a second tab, and the page catches up live.
 - **Print or save as PDF.** Clean, ink-friendly verdict printouts.
@@ -89,6 +89,7 @@ docker run -p 8000:8000 -e ANTHROPIC_API_KEY=sk-ant-... -v boardroom-data:/data 
 | `BOARDROOM_CONTACT_EMAIL` | `support@example.com` | Contact address in the legal pages. **Set this before launch.** |
 | `BOARDROOM_LEGAL_UPDATED` | `October 9, 2026` | "Last updated" date on the legal pages. |
 | `BOARDROOM_REFERRAL_BONUS` / `BOARDROOM_REFERRAL_CAP` | `3` / `30` | Bonus meetings per referral for each side, and the most one referrer can earn. |
+| `BOARDROOM_FREE_DEEP_PER_WEEK` | `1` | Free deep debates per week on the free plan. |
 | `BOARDROOM_FREE_DAILY_ASKS` / `BOARDROOM_PRO_DAILY_ASKS` | `10` / `200` | Questions to individual advisors per day. |
 | `BOARDROOM_MAX_CONCURRENT` | `2` | Meetings one user can have in session at once. |
 | `BOARDROOM_PRO_DAILY_LIMIT` | `50` | Fair-use cap on Pro meetings per day, so one account can't run up a huge API bill. |
@@ -161,6 +162,13 @@ python -m pytest
 ```
 
 GitHub Actions runs the suite on every push and pull request (`.github/workflows/tests.yml`).
+
+The suite includes a full meeting through the real Claude engine and the official SDK against `tests/fake_anthropic.py`, a local stand-in for the Messages API, so the real code path is tested without API costs. You can also run the whole app against it:
+
+```bash
+python tests/fake_anthropic.py 8767 &
+ANTHROPIC_API_KEY=x ANTHROPIC_BASE_URL=http://127.0.0.1:8767 python -m boardroom
+```
 
 ## Roadmap to revenue
 

@@ -151,11 +151,18 @@ def test_users_are_isolated(tmp_path):
 
 
 def test_free_plan_limits(tmp_path):
-    client = make_client(tmp_path, engine=PaidEngine(delay=0), demo_mode=False)
+    client = make_client(tmp_path, engine=PaidEngine(delay=0), demo_mode=False, free_daily_limit=3)
     signup(client)
     me = client.get("/api/me").json()
-    assert me["usage"] == {"plan": "free", "used_today": 0, "daily_limit": 2, "deep_mode": False, "bonus_meetings": 0}
-    assert client.post("/api/meetings", json={"question": "Deep one", "mode": "deep"}).status_code == 403
+    assert me["usage"] == {
+        "plan": "free", "used_today": 0, "daily_limit": 3, "deep_mode": False,
+        "free_deep_left": 1, "bonus_meetings": 0,
+    }
+    # One free deep debate a week, then deep is Pro-only.
+    assert client.post("/api/meetings", json={"question": "Deep one", "mode": "deep"}).status_code == 200
+    assert client.get("/api/me").json()["usage"]["free_deep_left"] == 0
+    r = client.post("/api/meetings", json={"question": "Deep two", "mode": "deep"})
+    assert r.status_code == 403 and "free Deep debate" in r.json()["detail"]
     for _ in range(2):
         assert client.post("/api/meetings", json={"question": "Question here"}).status_code == 200
     r = client.post("/api/meetings", json={"question": "One too many"})
@@ -992,7 +999,7 @@ def test_verdict_options_are_sorted_and_clamped(tmp_path):
 
 
 def test_referrals_grant_bonus_meetings(tmp_path):
-    client = make_client(tmp_path, engine=PaidEngine(delay=0), demo_mode=False, free_daily_limit=1, referral_bonus=2, referral_cap=3)
+    client = make_client(tmp_path, engine=PaidEngine(delay=0), demo_mode=False, free_daily_limit=1, referral_bonus=2, referral_cap=3, free_deep_per_week=0)
     signup(client)  # ada, the referrer
     info = client.get("/api/referral").json()
     assert info["bonus"] == 2 and info["invited"] == 0
@@ -1301,3 +1308,66 @@ def test_secret_key_persists_across_restarts(tmp_path):
     db = Database(str(tmp_path / "k.db"))
     first = db.secret_key()
     assert len(first) == 64 and Database(str(tmp_path / "k.db")).secret_key() == first
+
+
+def test_failed_free_deep_debate_is_given_back(tmp_path):
+    class PaidBroken(BrokenEngine):
+        name = "claude"
+
+    client = make_client(tmp_path, engine=PaidBroken(delay=0), demo_mode=False)
+    signup(client)
+    evs = events(client.post("/api/meetings", json={"question": "Deep but broken", "mode": "deep"}))
+    assert evs[-1]["type"] == "error"
+    assert client.get("/api/me").json()["usage"]["free_deep_left"] == 1
+
+
+# ---- the real Claude engine, end to end against a fake API ----------------------
+
+
+def test_full_meeting_through_the_claude_engine(tmp_path):
+    import anthropic
+
+    from boardroom.engine import ClaudeEngine
+    from tests.fake_anthropic import Handler, start
+
+    server, url = start()
+    try:
+        engine = ClaudeEngine(
+            "claude-opus-5-5", web_search=True,
+            client=anthropic.AsyncAnthropic(api_key="test", base_url=url, max_retries=0),
+        )
+        client = make_client(tmp_path, engine=engine, demo_mode=False, free_daily_limit=5)
+        signup(client)
+        evs = events(client.post("/api/meetings", json={"question": "Should I take a sabbatical?", "mode": "deep", "focus": "career"}))
+        kinds = [e["type"] for e in evs]
+        assert kinds.count("advisor_done") == 8 and kinds[-2:] == ["verdict", "done"]
+        assert any(e["type"] == "chair_draft" for e in evs)
+        verdict = evs[-2]["verdict"]
+        assert verdict["headline"] == "Take the sabbatical, with a return date."
+        assert [o["score"] for o in verdict["options"]] == [80, 35]
+
+        m = client.get(f"/api/meetings/{evs[0]['id']}").json()
+        assert m["status"] == "done" and len(m["steps"]) == 3
+        assert all("firm return date" in t["text"] for t in m["takes"])
+
+        # What the engine actually sent.
+        bodies = [r["body"] for r in Handler.requests]
+        assert len(bodies) == 9  # 4 openings + 4 rebuttals + the Chair
+        assert all(b["model"] == "claude-opus-5-5" and b["fallbacks"] == "default" for b in bodies)
+        assert all(r["beta"] == "server-side-fallback-2026-07-01" for r in Handler.requests)
+        assert all(b["thinking"] == {"type": "adaptive"} for b in bodies)
+        assert sum(1 for b in bodies if b.get("tools")) == 2  # the Analyst's two turns get web search
+        chair = [b for b in bodies if (b.get("output_config") or {}).get("format")]
+        assert len(chair) == 1 and chair[0]["output_config"]["effort"] == "medium" and chair[0]["stream"]
+        assert all("Career board" in b["messages"][0]["content"] for b in bodies)
+
+        # Usage was recorded and priced.
+        with client.app.state.db.conn() as c:
+            cost, out_tokens = c.execute("SELECT cost_usd, output_tokens FROM meetings").fetchone()
+        assert out_tokens == 9 * 300 and cost > 0
+
+        # A direct question goes through the same engine.
+        ask = events(client.post(f"/api/meetings/{evs[0]['id']}/ask", json={"advisor": "operator", "question": "First step?"}))
+        assert ask[-1]["type"] == "done" and "firm return date" in ask[-1]["answer"]
+    finally:
+        server.shutdown()
