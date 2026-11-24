@@ -112,6 +112,10 @@ class Database:
             c.execute(
                 "CREATE UNIQUE INDEX IF NOT EXISTS users_referral ON users(referral_code) WHERE referral_code IS NOT NULL"
             )
+            if "digest_emails" not in user_cols:
+                c.execute("ALTER TABLE users ADD COLUMN digest_emails INTEGER NOT NULL DEFAULT 1")
+            if "last_digest_at" not in user_cols:
+                c.execute("ALTER TABLE users ADD COLUMN last_digest_at TEXT")
             if "remind_emails" not in user_cols:
                 c.execute("ALTER TABLE users ADD COLUMN remind_emails INTEGER NOT NULL DEFAULT 1")
             cols = {r["name"] for r in c.execute("PRAGMA table_info(meetings)")}
@@ -217,6 +221,51 @@ class Database:
     def set_remind_emails(self, user_id: int, enabled: bool) -> None:
         with self.conn() as c:
             c.execute("UPDATE users SET remind_emails = ? WHERE id = ?", (int(enabled), user_id))
+
+    def set_digest_emails(self, user_id: int, enabled: bool) -> None:
+        with self.conn() as c:
+            c.execute("UPDATE users SET digest_emails = ? WHERE id = ?", (int(enabled), user_id))
+
+    def digest_candidates(self, now: datetime, every_days: int = 7, lookback_days: int = 90) -> list[dict[str, Any]]:
+        """Users due a weekly digest, with their open plan steps from recent decisions."""
+        due_before = (now - timedelta(days=every_days)).isoformat(timespec="seconds")
+        since = (now - timedelta(days=lookback_days)).isoformat(timespec="seconds")
+        with self.conn() as c:
+            users = c.execute(
+                "SELECT id, email, name FROM users WHERE digest_emails = 1 AND created_at <= ? "
+                "AND (last_digest_at IS NULL OR last_digest_at <= ?)",
+                (due_before, due_before),
+            ).fetchall()
+            out = []
+            for u in users:
+                rows = c.execute(
+                    "SELECT m.id, m.question, m.verdict, s.title, s.timing FROM steps s "
+                    "JOIN meetings m ON m.id = s.meeting_id "
+                    "WHERE m.user_id = ? AND m.status = 'done' AND s.done = 0 AND m.created_at >= ? "
+                    "AND m.outcome IS NULL ORDER BY m.id DESC, s.position",
+                    (u["id"], since),
+                ).fetchall()
+                meetings: dict[int, dict[str, Any]] = {}
+                for r in rows:
+                    if r["id"] not in meetings:
+                        if len(meetings) == 3:
+                            continue
+                        verdict = json.loads(r["verdict"]) if r["verdict"] else {}
+                        meetings[r["id"]] = {
+                            "id": r["id"], "question": r["question"],
+                            "headline": verdict.get("headline", ""), "steps": [],
+                        }
+                    if len(meetings[r["id"]]["steps"]) < 3:
+                        meetings[r["id"]]["steps"].append({"title": r["title"], "when": r["timing"]})
+                if meetings:
+                    out.append({"id": u["id"], "email": u["email"], "name": u["name"], "meetings": list(meetings.values())})
+            return out
+
+    def mark_digest_sent(self, user_id: int, when: datetime) -> None:
+        with self.conn() as c:
+            c.execute(
+                "UPDATE users SET last_digest_at = ? WHERE id = ?", (when.isoformat(timespec="seconds"), user_id)
+            )
 
     def due_reviews(self, today: str) -> list[dict[str, Any]]:
         with self.conn() as c:

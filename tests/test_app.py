@@ -1206,3 +1206,46 @@ def test_backup_does_not_touch_the_live_database(tmp_path, monkeypatch):
     with sq.connect(live) as c:
         assert c.execute("SELECT COUNT(*) FROM sessions").fetchone()[0] == 1  # no migrations ran
         assert [r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")] == ["sessions"]
+
+
+# ---- weekly digest -----------------------------------------------------------
+
+
+def test_weekly_digest(tmp_path):
+    from datetime import datetime, timedelta, timezone
+
+    client, mailer = reset_client(tmp_path)
+    signup(client)
+    meeting_id = events(client.post("/api/meetings", json={"question": "Should I\nlearn to code?"}))[0]["id"]
+    steps = client.get(f"/api/meetings/{meeting_id}").json()["steps"]
+    client.patch(f"/api/steps/{steps[0]['id']}", json={"done": True})
+    send = client.app.state.send_weekly_digests
+    now = datetime.now(timezone.utc)
+
+    assert send(now) == 0  # brand-new accounts wait a week
+    later = now + timedelta(days=8)
+    assert send(later) == 1
+    to, subject, body = mailer.sent[-1]
+    assert to == "ada@example.com" and "week" in subject.lower()
+    assert "Should I learn to code?" in body
+    assert steps[0]["title"] not in body          # done steps are skipped
+    assert f"[ ] {steps[1]['title']}" in body
+    assert f"https://boardroom.app/#/m/{meeting_id}" in body
+    assert send(later + timedelta(days=3)) == 0   # at most once a week
+    assert send(later + timedelta(days=8)) == 1
+
+    client.patch(f"/api/meetings/{meeting_id}/outcome", json={"outcome": "great"})
+    assert send(later + timedelta(days=16)) == 0  # decided: nothing to nag about
+
+
+def test_weekly_digest_opt_out(tmp_path):
+    from datetime import datetime, timedelta, timezone
+
+    client, mailer = reset_client(tmp_path)
+    signup(client)
+    events(client.post("/api/meetings", json={"question": "Opt out of digests"}))
+    assert client.get("/api/me").json()["digest_emails"] is True
+    client.patch("/api/account/preferences", json={"digest_emails": False})
+    assert client.get("/api/me").json()["digest_emails"] is False
+    assert client.get("/api/me").json()["remind_emails"] is True  # untouched
+    assert client.app.state.send_weekly_digests(datetime.now(timezone.utc) + timedelta(days=8)) == 0

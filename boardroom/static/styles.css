@@ -369,6 +369,7 @@ button, input, textarea { font: inherit; color: inherit; }
 .outcome-note .input { flex: 1; min-width: 0; padding: 8px 12px; font-size: 14px; }
 .history .due { color: var(--accent); font-weight: 650; margin-left: auto; }
 .toggle { display: flex; gap: 10px; align-items: center; font-size: 14px; cursor: pointer; }
+.toggle + .toggle { margin-top: 10px; }
 .toggle input { width: 16px; height: 16px; accent-color: var(--accent); }
 
 .chair-wait { padding: 22px; }

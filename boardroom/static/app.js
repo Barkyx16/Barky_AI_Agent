@@ -511,8 +511,9 @@ function showSettings() {
         <button class="btn" type="submit">Update password</button>
       </form>
       ${state.config.reminders ? `<div class="settings-block">
-        <h3>Reminders</h3>
+        <h3>Emails</h3>
         <label class="toggle"><input type="checkbox" id="remind" ${state.user.remind_emails ? "checked" : ""}> Email me when it's time to review a decision</label>
+        <label class="toggle"><input type="checkbox" id="digest" ${state.user.digest_emails ? "checked" : ""}> Weekly digest of my open plan steps</label>
       </div>` : ""}
       <div class="settings-block">
         <h3>Your data</h3>
@@ -532,14 +533,16 @@ function showSettings() {
     </div>`;
   const close = openModal(back);
   back.querySelector("#set-close").addEventListener("click", close);
-  back.querySelector("#remind")?.addEventListener("change", async (e) => {
-    const on = e.target.checked;
-    try {
-      await api("/api/account/preferences", { method: "PATCH", body: { remind_emails: on } });
-      state.user.remind_emails = on;
-      toast(on ? "Review reminders on" : "Review reminders off");
-    } catch (err) { e.target.checked = !on; toast(err.message); }
-  });
+  for (const [id, field, label] of [["remind", "remind_emails", "Review reminders"], ["digest", "digest_emails", "Weekly digest"]]) {
+    back.querySelector(`#${id}`)?.addEventListener("change", async (e) => {
+      const on = e.target.checked;
+      try {
+        await api("/api/account/preferences", { method: "PATCH", body: { [field]: on } });
+        state.user[field] = on;
+        toast(`${label} ${on ? "on" : "off"}`);
+      } catch (err) { e.target.checked = !on; toast(err.message); }
+    });
+  }
   back.querySelector("#pw-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const err = back.querySelector("#pw-error");

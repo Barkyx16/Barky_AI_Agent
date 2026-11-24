@@ -74,7 +74,8 @@ class ResetIn(BaseModel):
 
 
 class PreferencesIn(BaseModel):
-    remind_emails: bool
+    remind_emails: bool | None = None
+    digest_emails: bool | None = None
 
 
 class DeleteAccountIn(BaseModel):
@@ -170,12 +171,42 @@ def create_app(
             sent += 1
         return sent
 
+    def send_weekly_digests(now: datetime | None = None) -> int:
+        """Email each user a short list of their open plan steps, at most once a week."""
+        if mailer is None:
+            return 0
+        now = now or datetime.now(timezone.utc)
+        base = settings.public_url
+        sent = 0
+        for u in db.digest_candidates(now):
+            lines = [f"Hi {u['name']},", "", "Here's where your decisions stand this week.", ""]
+            for m in u["meetings"]:
+                lines.append(f"{' '.join(m['question'].split())}")
+                if m["headline"]:
+                    lines.append(f"  The board's call: {m['headline']}")
+                for s in m["steps"]:
+                    lines.append(f"  [ ] {s['title']}" + (f" ({s['when']})" if s["when"] else ""))
+                lines.append(f"  Open it: {base}/#/m/{m['id']}")
+                lines.append("")
+            lines.append("Small steps add up. Tick them off as you go, or tell the board how it turned out.")
+            lines.append("")
+            lines.append("You can turn off this weekly email in your account settings.")
+            try:
+                mailer.send(u["email"], "Your week ahead with the board", "\n".join(lines))
+            except Exception:
+                log.exception("failed to send weekly digest to user %s", u["id"])
+                continue
+            db.mark_digest_sent(u["id"], now)
+            sent += 1
+        return sent
+
     async def reminder_loop() -> None:
         while True:
-            try:
-                await asyncio.to_thread(send_review_reminders)
-            except Exception:
-                log.exception("review reminder pass failed")
+            for job in (send_review_reminders, send_weekly_digests):
+                try:
+                    await asyncio.to_thread(job)
+                except Exception:
+                    log.exception("%s failed", job.__name__)
             await asyncio.sleep(3600)
 
     @asynccontextmanager
@@ -190,6 +221,7 @@ def create_app(
     app.state.db = db
     app.state.hub = hub
     app.state.send_review_reminders = send_review_reminders
+    app.state.send_weekly_digests = send_weekly_digests
 
     app.state.engine = engine
     login_attempts: dict[str, deque] = defaultdict(deque)
@@ -261,6 +293,7 @@ def create_app(
             "can_manage_billing": billing is not None and bool(user["stripe_customer_id"]),
             "is_admin": user["email"] in settings.admin_emails,
             "remind_emails": bool(user["remind_emails"]),
+            "digest_emails": bool(user["digest_emails"]),
         }
 
     # ---- public -----------------------------------------------------------
@@ -378,7 +411,10 @@ def create_app(
 
     @app.patch("/api/account/preferences")
     def preferences(body: PreferencesIn, user=Depends(current_user)):
-        db.set_remind_emails(user["id"], body.remind_emails)
+        if body.remind_emails is not None:
+            db.set_remind_emails(user["id"], body.remind_emails)
+        if body.digest_emails is not None:
+            db.set_digest_emails(user["id"], body.digest_emails)
         return {"ok": True}
 
     @app.delete("/api/account")
