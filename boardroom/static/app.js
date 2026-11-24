@@ -217,20 +217,77 @@ function pendingRef() {
   }
 }
 
+/* The landing page's little play: each advisor speaks in turn, then the Chair rules. */
+const SCENE = [
+  ["analyst", "Three facts decide this: your runway, the realistic upside, and how reversible it is."],
+  ["skeptic", "The real risk isn't failing. It's drifting into it half-committed."],
+  ["strategist", "This isn't yes-or-no. Run a small, cheap test first."],
+  ["operator", "Step one, today: write down what success looks like in 90 days."],
+  ["chair", "Verdict: test it for six months while keeping your job. 78% confident."],
+];
+let sceneTimer = null;
+
+function runScene() {
+  clearTimeout(sceneTimer);
+  const line = document.getElementById("scene-line");
+  if (!line) return;
+  const names = Object.fromEntries(state.config.board.map((a) => [a.key, a.name]));
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let turn = 0;
+  const speak = () => {
+    if (!line.isConnected) return;  // left the landing page
+    const [key, text] = SCENE[turn % SCENE.length];
+    document.querySelectorAll("[data-seat]").forEach((el) => el.classList.toggle("talking", el.dataset.seat === key));
+    line.innerHTML = `<b>${esc(names[key] || "")}</b><span class="typed"></span>`;
+    const out = line.querySelector(".typed");
+    if (still) { out.textContent = text; out.classList.remove("typed"); turn++; sceneTimer = setTimeout(speak, 4200); return; }
+    let i = 0;
+    const type = () => {
+      if (!line.isConnected) return;
+      i += 2;
+      out.textContent = text.slice(0, i);
+      if (i < text.length) sceneTimer = setTimeout(type, 28);
+      else { out.classList.remove("typed"); turn++; sceneTimer = setTimeout(speak, key === "chair" ? 3400 : 1700); }
+    };
+    type();
+  };
+  speak();
+}
+
+/* Play the entrance animation for elements the first time they appear, not on re-renders. */
+const seenAnim = new Map();  // key -> when it first appeared
+let animScope = "page";
+function animateNew(root) {
+  const now = performance.now();
+  root.querySelectorAll("[data-anim]").forEach((el) => {
+    const first = seenAnim.get(el.dataset.anim);
+    if (first === undefined) seenAnim.set(el.dataset.anim, now);
+    const since = first === undefined ? 0 : now - first;
+    // An element re-created mid-animation picks up where the old one was, instead of
+    // replaying from the start or snapping to the end.
+    if (since > 1800) return;
+    el.style.setProperty("--since", `${Math.round(since)}ms`);
+    el.classList.add("enter");
+  });
+}
+
 function renderLanding(tab = "signup") {
   const ref = pendingRef();
-  const seats = boardAdvisors().map((a) => `
-    <div class="seat"><div class="avatar" data-c="${a.color}">${esc(a.initials)}</div>
-      <div><strong>${esc(a.name)}</strong><span>${esc(a.role)}</span></div></div>`).join("");
+  const seat = (a) => `<div class="seat-pos pos-${a.key}" data-seat="${a.key}">
+      <div class="avatar" data-c="${a.color}">${esc(a.initials)}</div><span>${esc(a.name.replace(/^The /, ""))}</span></div>`;
+  const scene = `<div class="scene" role="img" aria-label="The board around a table: the Analyst, the Skeptic, the Strategist and the Operator debate while the Chair listens.">
+      <div class="table"><p class="line" id="scene-line" aria-hidden="true"></p></div>
+      ${state.config.board.map(seat).join("")}
+    </div>`;
   $app.innerHTML = `
     <main class="landing">
       <section class="landing-hero">
         <div class="brand"><img src="/static/favicon.svg" alt=""> Boardroom</div>
         <h1>Every hard decision deserves a board meeting.</h1>
         <p class="lede">Bring any decision to a private board of AI advisors. They research the facts, argue it out in front of you, and the Chair hands you a verdict and a plan you can start today.</p>
-        <div class="seats">${seats}</div>
+        ${scene}
         <div class="how"><span><b>1</b>Ask your question</span><span><b>2</b>Watch the board debate</span><span><b>3</b>Get a verdict and a plan</span></div>
-        <p class="sample-link"><a class="btn" href="/#/sample">See a sample meeting →</a></p>
+        <p class="sample-link"><button class="btn btn-primary mobile-cta" type="button" id="jump-signup">Create a free account</button><a class="btn" href="/#/sample">See a sample meeting →</a></p>
         <p class="legal-links"><a href="/terms">Terms</a> · <a href="/privacy">Privacy</a></p>
       </section>
       <section class="landing-auth">
@@ -256,10 +313,16 @@ function renderLanding(tab = "signup") {
       </section>
     </main>`;
   applyStyles($app);
+  runScene();
   $app.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => renderLanding(b.dataset.tab)));
   document.getElementById("forgot")?.addEventListener("click", renderForgot);
+  document.getElementById("jump-signup")?.addEventListener("click", () => {
+    document.querySelector(".landing-auth").scrollIntoView({ behavior: "smooth" });
+    setTimeout(() => document.querySelector("#auth-form input")?.focus({ preventScroll: true }), 450);
+  });
   const form = document.getElementById("auth-form");
-  form.querySelector("input").focus();
+  // On phones, focusing would jump past the hero and open the keyboard straight away.
+  if (matchMedia("(min-width: 981px)").matches) form.querySelector("input").focus();
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const fd = Object.fromEntries(new FormData(form));
@@ -926,6 +989,7 @@ function renderLive() {
   if (!view) return;
   // First paint builds the layout; later paints update in place to keep scrolling smooth.
   const layoutKey = [live.id, live.rounds.length, live.chair, !!live.error, live.steps.length, live.running].join("|");
+  animScope = `m-${live.id}`;
   if (view.dataset.layout !== layoutKey) {
     view.innerHTML = meetingLayout({
       question: live.question, context: live.context, mode: live.mode, focus: live.focus, created_at: null, running: live.running,
@@ -939,6 +1003,7 @@ function renderLive() {
       + (live.error ? errorBox(live.error) : "");
     view.dataset.layout = layoutKey;
     applyStyles(view);
+    animateNew(view);
     bindMeetingActions(view, live);
     return;
   }
@@ -956,6 +1021,7 @@ function renderLive() {
       if (!card) continue;
       const r = live.remarks[a.key][round];
       card.querySelector(".state").outerHTML = stateBadge(r);
+      card.classList.toggle("speaking", !r.done && !!r.text);
       card.querySelector(".body").outerHTML = remarkBody(r);
       const src = card.querySelector(".sources");
       if (r.sources.length && !src) card.insertAdjacentHTML("beforeend", sourcesHtml(r.sources));
@@ -1012,7 +1078,7 @@ function sourcesHtml(sources) {
 }
 
 function remarkCard(a, r, round, ask = null) {
-  return `<article class="card advisor-card" data-c="${a.color}" data-card="${a.key}-${round}">
+  return `<article class="card advisor-card ${!r.done && r.text ? "speaking" : ""}" data-c="${a.color}" data-card="${a.key}-${round}" data-anim="${esc(animScope)}-${a.key}-${round}">
     <div class="advisor-head"><div class="avatar" data-c="${a.color}">${esc(a.initials)}</div>
       <div><div class="name">${esc(a.name)}</div><div class="role">${esc(a.role)}</div></div>
       ${stateBadge(r)}</div>
@@ -1139,11 +1205,12 @@ function outcomeBox(outcome, note) {
 }
 
 function verdictCard(v, steps, readonly = false, guest = null, reviewAt = null, outcome = undefined) {
+  const anim = `${animScope}-verdict`;
   const by = advisorsByKey(guest);
   const chair = by.chair;
   const done = steps.filter((s) => s.done).length;
   const pct = steps.length ? Math.round((100 * done) / steps.length) : 0;
-  return `<article class="card verdict">
+  return `<article class="card verdict" data-anim="${esc(anim)}">
     <div class="verdict-top">
       <div>
         <div class="who"><div class="avatar sm" data-c="${chair.color}">${chair.initials}</div>The Chair rules</div>
@@ -1322,6 +1389,7 @@ async function loadMeeting(id) {
   }
   if (state.meetingId !== id) return;
   if (m.status === "running" && await attach(m)) return;
+  animScope = `m-${id}`;
   const rounds = [...new Set(m.takes.map((t) => t.round))].sort();
   if (!rounds.length) rounds.push(1);
   const byKey = {};
@@ -1336,6 +1404,7 @@ async function loadMeeting(id) {
     + (m.verdict ? `<div class="section-title">The verdict</div>${verdictCard(m.verdict, m.steps, false, m.guest, m.review_at, { value: m.outcome, note: m.outcome_note })}${followupBox()}` : "")
     + (stalled ? errorBox(m.status === "running" ? "This meeting is still in session. Refresh in a moment to see the result." : "This meeting didn't finish.") : "");
   applyStyles(view);
+  animateNew(view);
   bindMeetingActions(view, m);
 }
 
@@ -1505,6 +1574,7 @@ async function renderAdmin() {
 /* ---------- public shared view ------------------------------------------ */
 
 async function renderShared(token, sample = false) {
+  animScope = sample ? "sample" : `s-${token}`;
   let m;
   try {
     m = await api(sample ? "/api/sample" : `/api/shared/${encodeURIComponent(token)}`);
@@ -1538,6 +1608,7 @@ async function renderShared(token, sample = false) {
       </div></main>
     </div>`;
   applyStyles($app);
+  animateNew($app);
 }
 
 /* ---------- boot ---------------------------------------------------------- */
